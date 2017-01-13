@@ -1146,14 +1146,32 @@ class JobWrapper( object, HasResourceParameters ):
 
         return True
 
-    def mark_as_resubmitted( self, info=None ):
+    def __mark_as( self, job_state, dataset_state=None, info=None ):
         job = self.get_job()
         self.sa_session.refresh( job )
         if info is not None:
             job.info = info
-        job.set_state( model.Job.states.RESUBMITTED )
-        self.sa_session.add( job )
+        job.set_state( job_state )
+        if dataset_state is not None:
+            for dataset_assoc in job.output_datasets + job.output_library_datasets:
+                dataset_assoc.dataset.dataset.state = dataset_state
+                dataset_assoc.dataset.info = info
+                self.sa_session.add( dataset_assoc.dataset.dataset )
         self.sa_session.flush()
+
+    def mark_as_paused( self, info=None )
+        self._mark_as(model.Job.states.PAUSED,
+                      dataset_state=model.Dataset.states.PAUSED,
+                      info=info)
+
+    def mark_as_resubmitted( self, info=None ):
+        self._mark_as(model.Job.states.RESUBMITTED,
+                      info=info)
+
+    def mark_as_limited( self, info=None ):
+        self._mark_as(model.Job.states.LIMITED,
+                      dataset_state=model.Dataset.states.LIMITED,
+                      info=info)
 
     def change_state( self, state, info=False, flush=True, job=None ):
         job_supplied = job is not None
