@@ -128,7 +128,9 @@ bower_components
 # Documentation build files.
 doc/build
 doc/schema.md
+doc/job_conf_schema.md
 doc/source/dev/schema.rst
+doc/source/admin/jobs/job_conf_schema.rst
 
 # Misc
 *.orig

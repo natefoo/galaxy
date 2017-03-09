@@ -17,7 +17,7 @@ ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) sou
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) source
 
-GENERATED_RST = source/dev/schema.rst
+GENERATED_RST = source/dev/schema.rst source/admin/jobs/job_conf_schema.rst
 
 .PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext updaterst
 
@@ -45,10 +45,17 @@ help:
 	@echo "  updaterst  to update sphinx rst to reflect code structure changes"
 
 schema.md: parse_gx_xsd.py schema_template.md ../lib/galaxy/tools/xsd/galaxy.xsd ## Build Github-flavored Markdown from Galaxy Tool XSD (expects libxml in environment)
-	python parse_gx_xsd.py schema_template.md ../lib/galaxy/tools/xsd/galaxy.xsd > $@
+	python parse_gx_xsd.py schema_template.md ../lib/galaxy/tools/xsd/galaxy.xsd $@
 
 source/dev/schema.rst: schema.md ## Convert Galaxy Tool XSD Markdown docs into reStructuredText (expects pandoc in environment)
-	pandoc schema.md -f markdown_github-hard_line_breaks -s -o $@
+	pandoc schema.md -f markdown_github-hard_line_breaks --columns=500 -s -o $@
+	./fix_schema_rst.sh $@
+
+job_conf_schema.md: parse_gx_xsd.py job_conf_schema_template.md ../lib/galaxy/jobs/xsd/galaxy.xsd
+	python parse_gx_xsd.py job_conf_schema_template.md ../lib/galaxy/jobs/xsd/galaxy.xsd $@
+
+source/admin/jobs/job_conf_schema.rst: job_conf_schema.md
+	pandoc job_conf_schema.md -f markdown_github-hard_line_breaks --columns=500 -s -o $@
 	./fix_schema_rst.sh $@
 
 # might also want to do

@@ -6,6 +6,7 @@
 #  - request_parameter_translation
 from __future__ import print_function
 
+import os
 import sys
 
 from lxml import etree
@@ -22,11 +23,18 @@ markdown_buffer = StringIO()
 
 def main():
     """Entry point for the function that builds Markdown help for the Galaxy XSD."""
-    for line in MARKDOWN_TEMPLATE.splitlines():
-        if line.startswith("$tag:"):
-            print(Tag(line).build_help())
-        else:
-            print(line)
+    f = open(sys.argv[3], "w")
+    try:
+        for line in MARKDOWN_TEMPLATE.splitlines():
+            if line.startswith("$tag:"):
+                print(Tag(line).build_help(), file=f)
+            else:
+                print(line, file=f)
+    except:
+        os.unlink(sys.argv[3])
+        raise
+    finally:
+        f.close()
 
 
 class Tag(object):

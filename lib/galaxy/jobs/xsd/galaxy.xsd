@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema
+        xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        xmlns:gxdocs="http://galaxyproject.org/xml/1.0"
+    elementFormDefault="qualified"
+    attributeFormDefault="unqualified"
+    >
+  <xs:annotation>
+    <xs:appinfo>Galaxy Schema</xs:appinfo>
+    <xs:documentation xml:lang="en">A Galaxy XML job management subsystem configuration file</xs:documentation>
+  </xs:annotation>
+
+  <xs:element name="job_conf">
+    <xs:annotation>
+      <xs:documentation xml:lang="en"><![CDATA[
+The outer-most tag set of job management subsystem configuration XML files.
+This tag has no attributes.
+      ]]></xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:all>
+        <xs:element name="plugins" type="Plugins" minOccurs="1">
+          <xs:unique name="unique-plugin-id">
+            <xs:selector xpath="plugin"/>
+            <xs:field xpath="@id"/>
+          </xs:unique>
+        </xs:element>
+      </xs:all>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name="Plugins">
+    <xs:annotation>
+      <xs:documentation xml:lang="en"><![CDATA[
+Contains all defined job management subsystem plugins, currently in the form of
+"runner" plugins, which are responsible for running Galaxy jobs.
+
+The value of the `worker` attribute is used differently depending on the
+plugin to which it's applied:
+
+- ``LocalJobRunner`` plugin: Defines the number of concurrent jobs to run
+- All other plugins: Defines the number of threads to allocate for preparing
+  jobs to run and collecting jobs once complete
+      ]]></xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="plugin" type="Plugin" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="workers" type="xs:integer">
+      <xs:annotation>
+        <xs:documentation xml:lang="en"><![CDATA[
+Default value for number of workers, can be overridden by individual plugins'
+``worker`` attributes.
+        ]]></xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="Plugin">
+    <xs:annotation>
+      <xs:documentation xml:lang="en"><![CDATA[
+Definition to load and configure a plugin. Currently, only "runner" plugins are
+supported, which are responsible for running Galaxy jobs.
+      ]]></xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="param" type="ParamType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="id" use="required" type="xs:string">
+      <xs:annotation>
+        <xs:documentation xml:lang="en"><![CDATA[
+A unique identifier for this plugin, that corresponds to the ``runner``
+destination attribute.
+        ]]></xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="type" use="required" fixed="runner">
+      <xs:annotation>
+        <xs:documentation xml:lang="en"><![CDATA[
+The type of plugin, currently only ``runner`` is used.
+        ]]></xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="load" use="required" type="PluginType">
+      <xs:annotation>
+        <xs:documentation xml:lang="en"><![CDATA[
+The plugin's module and class, specified as ``module.submodule:Class``
+        ]]></xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="workers" type="xs:integer">
+      <xs:annotation>
+        <xs:documentation xml:lang="en"><![CDATA[
+Number of workers, same as in the [parent plugins
+group](#job_conf-plugins)'s attribute of the same name.
+        ]]></xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:simpleType name="PluginType">
+    <xs:annotation>
+      <xs:documentation xml:lang="en">Documentation for PluginType</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="galaxy.jobs.runners.local:LocalJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.pbs:PBSJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.drmaa:DRMAAJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.drmaa:DRMAAJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.cli:ShellJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.condor:CondorJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.slurm:SlurmJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.pulsar:PulsarRESTJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.pulsar:PulsarMQJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.pulsar:PulsarLegacyJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.pulsar:PulsarEmbeddedJobRunner"/>
+      <xs:enumeration value="galaxy.jobs.runners.kubernetes:kubernetes"/>
+      <xs:enumeration value="galaxy.jobs.runners.godocker:GodockerJobRunner"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="ParamType">
+    <xs:annotation>
+      <xs:documentation xml:lang="en">Documentation for ParamType</xs:documentation>
+    </xs:annotation>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+				<xs:attribute name="id" use="required" type="xs:string">
+					<xs:annotation>
+						<!-- FIXME link plugin documentation -->
+						<xs:documentation xml:lang="en"><![CDATA[
+Parameter id, this is plugin-specific, see plugin documentation for possible
+values.
+						]]></xs:documentation>
+					</xs:annotation>
+				</xs:attribute>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+</xs:schema>
