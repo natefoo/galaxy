@@ -19,6 +19,10 @@ from tempfile import NamedTemporaryFile
 from xml.etree import ElementTree
 
 import six
+try:
+    import uwsgi
+except ImportError:
+    uwsgi = None
 
 import galaxy
 from galaxy import model, util
@@ -164,6 +168,14 @@ class JobConfiguration( object ):
         except Exception as e:
             raise config_exception(e, job_config_file)
 
+    def __config_default_handlers(self):
+        """This is a stop-gap solution until the job conf loading is rewritten
+        for YAML job conf support.
+        """
+        if not uwsgi:
+            self.handlers[self.app.config.server_name] = (self.app.config.server_name,)
+            self.default_handler_id = self.app.config.server_name
+
     def __parse_job_conf_xml(self, tree):
         """Loads the new-style job configuration from options in the job config file (by default, job_conf.xml).
 
@@ -218,9 +230,11 @@ class JobConfiguration( object ):
 
         # Must define at least one handler to have a default.
         if not self.handlers:
-            raise ValueError("Job configuration file defines no valid handler elements.")
-        # Determine the default handler(s)
-        self.default_handler_id = self.__get_default(handlers, list(self.handlers.keys()))
+            self.__config_default_handlers()
+            log.info("No handlers defined or empty handlers group, will use default handlers: %s", self.handlers)
+        else:
+            # Determine the default handler(s)
+            self.default_handler_id = self.__get_default(handlers, list(self.handlers.keys()))
 
         # Parse destinations
         destinations = root.find('destinations')
@@ -344,11 +358,7 @@ class JobConfiguration( object ):
             self.runner_plugins.append(dict(id=runner, load=runner, workers=self.app.config.cluster_job_queue_workers))
 
         # Set the handlers
-        for id in self.app.config.job_handlers:
-            self.handlers[id] = (id,)
-
-        self.handlers['default_job_handlers'] = self.app.config.default_job_handlers
-        self.default_handler_id = 'default_job_handlers'
+        self.__config_default_handlers()
 
         # Set tool handler configs
         for id, tool_handlers in self.app.config.tool_handlers.items():
@@ -627,6 +637,8 @@ class JobConfiguration( object ):
 
         :returns: str -- A valid job handler ID.
         """
+        if id_or_tag is None and self.default_handler_id is None:
+            return None
         if id_or_tag is None:
             id_or_tag = self.default_handler_id
         return self.__get_single_item(self.handlers[id_or_tag])
@@ -756,6 +768,8 @@ class JobConfiguration( object ):
 
         :return: bool
         """
+        if uwsgi and self.app.config.server_name.startswith('mule'):
+            return True
         for collection in self.handlers.values():
             if server_name in collection:
                 return True
