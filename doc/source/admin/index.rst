@@ -1,12 +1,17 @@
-Special Topics in Galaxy Administration & Deployment Documentation
-==================================================================
+Galaxy Administration & Deployment Documentation
+================================================
 
-This documentation intends to function as a version-specific supplement to the
-`wiki <https://wiki.galaxyproject.org/Admin/>`__, not the primary admin
-documentation. These resources should be used together.
+This documentation intends to function as a version-specific guide to
+installing, configuring, and administrating Galaxy. Although not all
+documentation has yet been ported from the
+`wiki <https://wiki.galaxyproject.org/Admin/>`__ or
+`community hub <https://new.galaxyproject.org/admin/>`__, efforts toward that
+end are under way.
 
 .. toctree::
    :maxdepth: 3
+
+   install/index.rst
 
    dependency_resolvers.rst
 

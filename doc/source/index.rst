@@ -38,7 +38,7 @@ Contents
 
    Developer Documentation <dev/index>
 
-   Special topics in Administration <admin/index>
+   Administration Documentation <admin/index>
 
    Project Governance <project/organization>
 
