@@ -24,7 +24,7 @@ from galaxy.jobs.runners.util.job_script import write_script
 from galaxy.jobs.runners.util.job_script import job_script
 from galaxy.jobs.runners.util.env import env_to_statement
 
-from .state_handler_factory import build_state_handlers
+from ..state_handler_factory import build_state_handlers
 
 log = logging.getLogger( __name__ )
 
@@ -372,7 +372,7 @@ class BaseJobRunner( object ):
     def fail_job( self, job_state, exception=False ):
         if getattr( job_state, 'stop_job', True ):
             self.stop_job( self.sa_session.query( self.app.model.Job ).get( job_state.job_wrapper.job_id ) )
-        self._handle_runner_state( 'failure', job_state )
+        self._handle_runner_state( 'runner_failure', job_state )
         # Not convinced this is the best way to indicate this state, but
         # something necessary
         if not job_state.runner_state_handled:

@@ -32,6 +32,8 @@ from galaxy.util.expressions import ExpressionContext
 from galaxy.util.handlers import ConfiguresHandlers
 from galaxy.util.xml_macros import load
 
+from .state_handler_factory import build_state_handlers
+
 from .datasets import (DatasetPath, NullDatasetPathRewriter,
     OutputsToWorkingDirectoryPathRewriter, TaskPathRewriter)
 from .output_checker import check_output
@@ -759,6 +761,8 @@ class JobWrapper( object, HasResourceParameters ):
         self.__user_system_pwent = None
         self.__galaxy_system_pwent = None
 
+        self.tool_exit_state_handlers = build_state_handlers()
+
     def _job_dataset_path_rewriter( self, working_directory ):
         outputs_to_working_directory = util.asbool(self.get_destination_configuration("outputs_to_working_directory", False))
         if outputs_to_working_directory:
@@ -1135,6 +1139,16 @@ class JobWrapper( object, HasResourceParameters ):
             self.app.config, key, default
         )
 
+    def _handle_tool_exit_code(self, handler_function, tool_exit_code):
+        try:
+            for handler in self.tool_exit_state_handlers.get(handler_function, []):
+                if handler(self.app, self, tool_exit_code):
+                    # FIXME: "handled" does not necessarily mean "resubmitted, stop handling finish"
+                    return True
+        except:
+            log.exception('Caught exception in runner state handler:')
+        return False
+
     def finish(
         self,
         stdout,
@@ -1181,6 +1195,9 @@ class JobWrapper( object, HasResourceParameters ):
         if ( self.check_tool_output( stdout, stderr, tool_exit_code, job ) ):
             final_job_state = job.states.OK
         else:
+            # FIXME: can't return here because we can't assume "handling" == resubmit
+            if self._handle_tool_exit_code('tool_failure', tool_exit_code):
+                return
             final_job_state = job.states.ERROR
 
         if self.tool.version_string_cmd:
