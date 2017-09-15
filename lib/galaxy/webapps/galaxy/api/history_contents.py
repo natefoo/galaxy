@@ -23,6 +23,7 @@ from galaxy.managers import history_contents
 from galaxy.managers import hdas
 from galaxy.managers import hdcas
 from galaxy.managers import folders
+from galaxy.managers import jobs
 from galaxy.managers.collections_util import api_payload_to_create_params
 from galaxy.managers.collections_util import dictify_dataset_collection_instance
 
@@ -37,10 +38,12 @@ class HistoryContentsController( BaseAPIController, UsesLibraryMixin, UsesLibrar
         self.hda_manager = hdas.HDAManager( app )
         self.history_manager = histories.HistoryManager( app )
         self.history_contents_manager = history_contents.HistoryContentsManager( app )
+        self.job_manager = jobs.JobManager( app )
         self.folder_manager = folders.FolderManager()
         self.hda_serializer = hdas.HDASerializer( app )
         self.hda_deserializer = hdas.HDADeserializer( app )
         self.hdca_serializer = hdcas.HDCASerializer( app )
+        self.job_serializer = jobs.JobSerializer( app )
         self.history_contents_filters = history_contents.HistoryContentsFilters( app )
 
     @expose_api_anonymous
@@ -61,8 +64,8 @@ class HistoryContentsController( BaseAPIController, UsesLibraryMixin, UsesLibrar
         :param  history_id: encoded id string of the HDA's History
         :type   ids:        str
         :param  ids:        (optional) a comma separated list of encoded `HDA` ids
-        :param  types:      (optional) kinds of contents to index (currently just
-                            dataset, but dataset_collection will be added shortly).
+        :param  types:      (optional) a comma separated list of kinds of contents
+                            to index (available: `dataset`, `dataset_collection`)
         :type   types:      str
 
         :rtype:     list
@@ -82,7 +85,7 @@ class HistoryContentsController( BaseAPIController, UsesLibraryMixin, UsesLibrar
         if types:
             types = util.listify(types)
         else:
-            types = [ 'dataset', "dataset_collection" ]
+            types = [ 'dataset', 'dataset_collection' ]
 
         contents_kwds = { 'types': types }
         if ids:
@@ -557,7 +560,7 @@ class HistoryContentsController( BaseAPIController, UsesLibraryMixin, UsesLibrar
         filter_params = self.parse_filter_params( kwd )
         filters = self.history_contents_filters.parse_filters( filter_params )
         limit, offset = self.parse_limit_offset( kwd )
-        order_by = self._parse_order_by( kwd.get( 'order', 'hid-asc' ) )
+        # FIXME: order_by belongs here
         serialization_params = self._parse_serialization_params( kwd, 'summary' )
         # TODO: > 16.04: remove these
         # TODO: remove 'dataset_details' and the following section when the UI doesn't need it
@@ -570,24 +573,36 @@ class HistoryContentsController( BaseAPIController, UsesLibraryMixin, UsesLibrar
             details = util.listify( details )
         view = serialization_params.pop( 'view' )
 
-        contents = self.history_contents_manager.contents( history,
-            filters=filters, limit=limit, offset=offset, order_by=order_by )
-        for content in contents:
+        if view == 'job':
+            log.debug( '#### filterparams %s', filter_params )
+            #filters = self.job_manager.parse_filters( filter_params )
+            filters = [ trans.app.model.Job.history == history ]
+            log.debug( '#### filters %s', filters )
+            from sqlalchemy import asc
+            order_by = asc( trans.app.model.Job.id )
+            contents = self.job_manager.query( filters=filters, limit=limit, offset=offset, order_by=order_by )
+            for content in contents:
+                rval.append( self.job_serializer.serialize_to_view( content, user=trans.user, trans=trans, view='summary', **serialization_params ) )
+        else:
+            order_by = self._parse_order_by( kwd.get( 'order', 'hid-asc' ) )
+            contents = self.history_contents_manager.contents( history,
+                filters=filters, limit=limit, offset=offset, order_by=order_by )
+            for content in contents:
 
-            # TODO: remove split
-            if isinstance( content, trans.app.model.HistoryDatasetAssociation ):
                 # TODO: remove split
-                if details == 'all' or trans.security.encode_id( content.id ) in details:
-                    rval.append( self.hda_serializer.serialize_to_view( content,
-                        user=trans.user, trans=trans, view='detailed', **serialization_params ) )
-                else:
-                    rval.append( self.hda_serializer.serialize_to_view( content,
-                        user=trans.user, trans=trans, view=view, **serialization_params ) )
+                if isinstance( content, trans.app.model.HistoryDatasetAssociation ):
+                    # TODO: remove split
+                    if details == 'all' or trans.security.encode_id( content.id ) in details:
+                        rval.append( self.hda_serializer.serialize_to_view( content,
+                            user=trans.user, trans=trans, view='detailed', **serialization_params ) )
+                    else:
+                        rval.append( self.hda_serializer.serialize_to_view( content,
+                            user=trans.user, trans=trans, view=view, **serialization_params ) )
 
-            elif isinstance( content, trans.app.model.HistoryDatasetCollectionAssociation ):
-                collection = self.hdca_serializer.serialize_to_view( content,
-                    user=trans.user, trans=trans, view=view, **serialization_params )
-                rval.append( collection )
+                elif isinstance( content, trans.app.model.HistoryDatasetCollectionAssociation ):
+                    collection = self.hdca_serializer.serialize_to_view( content,
+                        user=trans.user, trans=trans, view=view, **serialization_params )
+                    rval.append( collection )
 
         return rval
 

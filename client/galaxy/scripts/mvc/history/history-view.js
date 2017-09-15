@@ -5,6 +5,7 @@ define([
     "mvc/history/history-preferences",
     "mvc/history/hda-li",
     "mvc/history/hdca-li",
+    "mvc/job/job-li",
     "mvc/user/user-model",
     "mvc/ui/error-modal",
     "ui/fa-icon-button",
@@ -18,6 +19,7 @@ define([
     HISTORY_PREFS,
     HDA_LI,
     HDCA_LI,
+    JOB_LI,
     USER,
     ERROR_MODAL,
     faIconButton,
@@ -47,6 +49,8 @@ var HistoryView = _super.extend(
     HDAViewClass        : HDA_LI.HDAListItemView,
     /** class to use for constructing the HDCA views */
     HDCAViewClass       : HDCA_LI.HDCAListItemView,
+    /** class to use for for constructing Job views */
+    JobViewClass        : JOB_LI.JobListItemView,
     /** class to used for constructing collection of sub-view models */
     collectionClass     : HISTORY_CONTENTS.HistoryContents,
     /** key of attribute in model to assign to this.collection */
@@ -128,6 +132,9 @@ var HistoryView = _super.extend(
         self.setModel( new HISTORY_MODEL.History({ id : historyId }) );
 
         contentsOptions.silent = true;
+        // FIXME: obviously
+        contentsOptions.view = 'job';
+        console.log( 'contentsOptions', contentsOptions );
         self.trigger( 'loading' );
         return self.model
             .fetchWithContents( options, contentsOptions )
@@ -178,6 +185,7 @@ var HistoryView = _super.extend(
     _buildNewRender : function(){
         var $newRender = _super.prototype._buildNewRender.call( this );
         this._renderSelectButton( $newRender );
+        this._renderJobViewButton( $newRender );
         return $newRender;
     },
 
@@ -206,6 +214,17 @@ var HistoryView = _super.extend(
             faIcon  : 'fa-check-square-o'
         }).prependTo( $where.find( '.controls .actions' ) );
     },
+
+    /** button for job view mode */
+    _renderJobViewButton : function( $where ){
+        $where = $where || this.$el;
+        return faIconButton({
+            title   : _l( 'Collapse datasets to jobs' ),
+            classes : 'view-as-jobs-btn',
+            faIcon  : 'fa-FIXME-o'
+        }).prependTo( $where.find( '.controls .actions' ) );
+    },
+
 
     /** override to avoid showing intial empty message using contents_active */
     _renderEmptyMessage : function( $whereTo ){
@@ -312,6 +331,8 @@ var HistoryView = _super.extend(
                 return this.HDAViewClass;
             case 'dataset_collection':
                 return this.HDCAViewClass;
+            case 'job':
+                return this.JobViewClass;
         }
         throw new TypeError( 'Unknown history_content_type: ' + contentType );
     },

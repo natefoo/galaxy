@@ -18,18 +18,19 @@ var Job = Backbone.Model
 
     /** default attributes for a model */
     defaults : {
-        model_class : 'Job',
+        model_class 		: 'Job',
+        history_content_type: 'job',
 
-        tool_id     : null,
-        exit_code   : null,
+        tool_id     		: null,
+        exit_code   		: null,
 
-        inputs      : {},
-        outputs     : {},
-        params      : {},
+        inputs      		: {},
+        outputs     		: {},
+        params      		: {},
 
-        create_time : null,
-        update_time : null,
-        state       : STATES.NEW
+        create_time 		: null,
+        update_time 		: null,
+        state       		: STATES.NEW
     },
 
     /** override to parse params on incomming */

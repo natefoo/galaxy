@@ -1,6 +1,6 @@
 <%inherit file="/base.mako"/>
 <%namespace file="/message.mako" import="render_msg" />
-<% from galaxy.util import listify, nice_size, unicodify %>
+<% from galaxy.util import nice_size, unicodify %>
 
 <style>
     .inherit {
@@ -79,7 +79,7 @@
                     <tr>
                         ${inputs_recursive_indent( text=input.label, depth=depth )}
                         <td>
-                        %for i, element in enumerate(listify(param_values[input.name])):
+                        %for i, element in enumerate(util.listify(param_values[input.name])):
                             %if i > 0:
                             ,
                             %endif
