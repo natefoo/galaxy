@@ -57,7 +57,8 @@ anyjson==0.3.3
 
 # Pulsar requirements
 psutil==4.1.0
-pulsar-galaxy-lib==0.7.5
+#pulsar-galaxy-lib==0.7.5
+https://depot.galaxyproject.org/nate/pulsar_galaxy_lib-0.8.0.dev0-py2-none-any.whl
 
 # sqlalchemy-migrate and dependencies
 sqlalchemy-migrate==0.10.0
