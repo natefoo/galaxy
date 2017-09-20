@@ -1568,6 +1568,9 @@ class JobWrapper(object, HasResourceParameters):
                     paths.append(DatasetPath(da.id, real_path=real_path, false_path=false_path, mutable=False))
         return paths
 
+    def get_output_basenames(self):
+        return map(os.path.basename, map(str, self.get_output_fnames()))
+
     def get_output_fnames(self):
         if self.output_paths is None:
             self.compute_outputs()
@@ -1995,6 +1998,10 @@ class ComputeEnvironment(object):
     """
 
     @abstractmethod
+    def output_names(self):
+        """ Output unqualified filenames defined by job. """
+
+    @abstractmethod
     def output_paths(self):
         """ Output DatasetPaths defined by job. """
 
@@ -2058,6 +2065,9 @@ class SharedComputeEnvironment(SimpleComputeEnvironment):
         self.app = job_wrapper.app
         self.job_wrapper = job_wrapper
         self.job = job
+
+    def output_names(self):
+        return self.job_wrapper.get_output_basenames()
 
     def output_paths(self):
         return self.job_wrapper.get_output_fnames()
