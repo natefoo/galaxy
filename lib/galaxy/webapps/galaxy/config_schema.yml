@@ -1,0 +1,17 @@
+type: map
+mapping:
+  uwsgi: !include uwsgi_schema.yml
+  galaxy:
+    type: map
+    required: true
+    desc: |
+      Galaxy configuration options.
+    mapping:
+      logging:
+        type: map
+        default: galaxy.config.LOGGING_CONFIG_DEFAULT
+        desc: |
+          Controls where and how the server logs messages. If unset, the default is to log all messages to standard
+          output at the level defined by the `log_level` configuration option. Configuration is described in the
+          documentation at:
+          https://docs.galaxyproject.org/en/master/admin/config_logging.html
