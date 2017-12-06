@@ -109,7 +109,8 @@ find_server() {
         [ "$server_config" != "none" ] && arg_getter_args="-c $server_config"
         [ -n "$server_app" ] && arg_getter_args="--app $server_app"
         run_server="$UWSGI"
-        server_args="$(python ./scripts/get_uwsgi_args.py $arg_getter_args) $uwsgi_args"
+        python ./scripts/uwsgi_helper.py write_vassals || exit 1
+        server_args="`python ./scripts/uwsgi_helper.py $arg_getter_args get_args` $uwsgi_args" || exit 1
     else
         run_server="python"
         server_args="./scripts/paster.py serve $server_config $paster_args"

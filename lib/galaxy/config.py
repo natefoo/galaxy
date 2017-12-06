@@ -167,6 +167,10 @@ class Configuration(object):
         self.gid = os.getgid()  # if running under newgrp(1) we'll need to fix the group of data created on the cluster
 
         self.version_major = VERSION_MAJOR
+
+        # Where galaxy-modifiable data lives
+        self.data_dir = resolve_path(kwargs.get("data_dir", "database"), self.root)
+
         # Database related configuration
         self.database = resolve_path(kwargs.get("database_file", "database/universe.sqlite"), self.root)
         self.database_connection = kwargs.get("database_connection", False)
