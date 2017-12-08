@@ -82,7 +82,8 @@ class InteractiveEnvironmentRequest(object):
                 # continue anyway
 
         # This duplicates the logic in the proxy manager
-        if self.attr.galaxy_config.dynamic_proxy_external_proxy:
+        _route_proxy = self.attr.galaxy_config.dynamic_proxy == 'uwsgi' and self.attr.galaxy_config.manage_dynamic_proxy
+        if self.attr.galaxy_config.dynamic_proxy_external_proxy or _route_proxy:
             self.attr.proxy_prefix = '/'.join(
                 (
                     '',

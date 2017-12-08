@@ -650,7 +650,7 @@ class Configuration(object):
         self.dynamic_proxy_bind_port = int(kwargs.get("dynamic_proxy_bind_port", "8800"))
         self.dynamic_proxy_bind_ip = kwargs.get("dynamic_proxy_bind_ip", "0.0.0.0")
         self.dynamic_proxy_external_proxy = string_as_bool(kwargs.get("dynamic_proxy_external_proxy", "False"))
-        self.dynamic_proxy_prefix = kwargs.get("dynamic_proxy_prefix", "gie_proxy")
+        self.dynamic_proxy_prefix = kwargs.get("dynamic_proxy_prefix", "proxy")
 
         self.dynamic_proxy = kwargs.get("dynamic_proxy", "node")
         self.dynamic_proxy_golang_noaccess = kwargs.get("dynamic_proxy_golang_noaccess", 60)

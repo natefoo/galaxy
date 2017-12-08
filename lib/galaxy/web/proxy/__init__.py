@@ -37,7 +37,10 @@ class ProxyManager(object):
 
             setattr(self, option, getattr(config, option))
 
-        if self.manage_dynamic_proxy:
+        self._manage = not self.dynamic_proxy == 'uwsgi' and self.manage_dynamic_proxy
+        self._route_proxy = self.dynamic_proxy == 'uwsgi' and self.manage_dynamic_proxy
+
+        if self._manage:
             self.lazy_process = self.__setup_lazy_process(config)
         else:
             self.lazy_process = NoOpLazyProcess()
@@ -51,7 +54,7 @@ class ProxyManager(object):
         self.lazy_process.shutdown()
 
     def setup_proxy(self, trans, host=DEFAULT_PROXY_TO_HOST, port=None, proxy_prefix="", route_name="", container_ids=None, container_interface=None):
-        if self.manage_dynamic_proxy:
+        if self._manage:
             log.info("Attempting to start dynamic proxy process")
             log.debug("Cmd: " + ' '.join(self.lazy_process.command_and_args))
             self.lazy_process.start_process()
@@ -71,10 +74,18 @@ class ProxyManager(object):
         # TODO: These shouldn't need to be request.host and request.scheme -
         # though they are reasonable defaults.
         host = trans.request.host
+        port = None
         if ':' in host:
-            host = host[0:host.index(':')]
+            host, port = host.split(':', 1)
         scheme = trans.request.scheme
-        if not self.dynamic_proxy_external_proxy:
+        if self._route_proxy:
+            proxy_url = '%s://%s%s%s' % (
+                scheme,
+                host,
+                ':%s' % port if port else '',
+                proxy_prefix
+            )
+        elif not self.dynamic_proxy_external_proxy:
             proxy_url = '%s://%s:%d' % (scheme, host, self.dynamic_proxy_bind_port)
         else:
             proxy_url = '%s://%s%s' % (scheme, host, proxy_prefix)
@@ -172,7 +183,7 @@ class ProxyRequests(object):
 
 def proxy_ipc(config):
     proxy_session_map = config.proxy_session_map
-    if config.dynamic_proxy == "node":
+    if config.dynamic_proxy in ("node", "uwsgi"):
         if proxy_session_map.endswith(".sqlite"):
             return SqliteProxyIpc(proxy_session_map)
         else:
