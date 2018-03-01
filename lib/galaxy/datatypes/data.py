@@ -770,6 +770,8 @@ class Text(Data):
     file_ext = 'txt'
     line_class = 'line'
 
+    is_binary = False
+
     # Add metadata elements
     MetadataElement(name="data_lines", default=0, desc="Number of data lines", readonly=True, optional=True, visible=False, no_value=0)
 

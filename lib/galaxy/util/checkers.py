@@ -124,10 +124,24 @@ def check_bz2(file_path, check_content=True):
     return (True, True)
 
 
-def check_zip(file_path):
-    if zipfile.is_zipfile(file_path):
-        return True
-    return False
+def check_zip(file_path, check_content=True):
+    # note this only checks the first file in a zip
+    if not zipfile.is_zipfile(file_path):
+        return (False, False)
+
+    if not check_content:
+        return (True, True)
+
+    CHUNK_SIZE = 2 ** 15  # 32Kb
+    chunk = None
+    with zipfile.ZipFile(path) as zip_archive:
+        for name in zip_archive.namelist():
+            if not name.endswith('/'):
+                chunk = z.open(name).read(CHUNK_SIZE)
+                break
+    if chunk:
+        return (True, not check_html(file_path, chunk))
+    return (True, False)
 
 
 def is_bz2(file_path):
@@ -138,6 +152,11 @@ def is_bz2(file_path):
 def is_gzip(file_path):
     is_gzipped, is_valid = check_gzip(file_path, check_content=False)
     return is_gzipped
+
+
+def is_zip(file_path):
+    is_zipped, is_valid = check_zip(file_path, check_content=False)
+    return is_zipped
 
 
 def check_image(file_path):
@@ -156,4 +175,5 @@ __all__ = (
     'check_zip',
     'is_gzip',
     'is_bz2',
+    'is_zip',
 )

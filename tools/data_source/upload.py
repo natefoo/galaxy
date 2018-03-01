@@ -78,8 +78,55 @@ def parse_outputs(args):
     return rval
 
 
+def unix_uncompress(dataset, registry, json_file, output_path, compression_class):
+	CHUNK_SIZE = 2 ** 20  # 1Mb
+	fd, uncompressed = tempfile.mkstemp(prefix='data_id_%s_upload_uncompress_' % dataset.dataset_id, dir=os.path.dirname(output_path), text=False)
+	compressed_file = compression_class(dataset.path, 'rb')
+gzip.GzipFile(dataset.path, 'rb')
+	while 1:
+		try:
+			chunk = gzipped_file.read(CHUNK_SIZE)
+		except IOError:
+			os.close(fd)
+			os.remove(uncompressed)
+			raise UploadProblemException('Problem decompressing gzipped data')
+		if not chunk:
+			break
+		os.write(fd, chunk)
+	os.close(fd)
+	gzipped_file.close()
+	# Replace the gzipped file with the decompressed file if it's safe to do so
+	if not in_place:
+		dataset.path = uncompressed
+	else:
+		shutil.move(uncompressed, dataset.path)
+	os.chmod(dataset.path, 0o644)
+
+	CHUNK_SIZE = 2 ** 20  # 1Mb
+	fd, uncompressed = tempfile.mkstemp(prefix='data_id_%s_upload_bunzip2_' % dataset.dataset_id, dir=os.path.dirname(output_path), text=False)
+	bzipped_file = bz2.BZ2File(dataset.path, 'rb')
+	while 1:
+		try:
+			chunk = bzipped_file.read(CHUNK_SIZE)
+		except IOError:
+			os.close(fd)
+			os.remove(uncompressed)
+			raise UploadProblemException('Problem decompressing bz2 compressed data')
+		if not chunk:
+			break
+		os.write(fd, chunk)
+	os.close(fd)
+	bzipped_file.close()
+	# Replace the bzipped file with the decompressed file if it's safe to do so
+	if not in_place:
+		dataset.path = uncompressed
+	else:
+		shutil.move(uncompressed, dataset.path)
+	os.chmod(dataset.path, 0o644)
+
 def add_file(dataset, registry, json_file, output_path):
-    data_type = None
+    ext = None
+    containing_ext = None
     line_count = None
     converted_path = None
     stdout = None
@@ -114,7 +161,7 @@ def add_file(dataset, registry, json_file, output_path):
     # decompressing archive files before sniffing.
     auto_decompress = dataset.get('auto_decompress', True)
     try:
-        ext = dataset.file_type
+        dataset.file_type
     except AttributeError:
         raise UploadProblemException('Unable to process uploaded file, missing file_type parameter.')
 
@@ -132,16 +179,44 @@ def add_file(dataset, registry, json_file, output_path):
         raise UploadProblemException('The uploaded file is empty')
     # Is dataset content supported sniffable binary?
     is_binary = check_binary(dataset.path)
-    if is_binary:
+    # Decompress if needed. If a keep-compressed datatype is explicitly selected or if autodetection is selected and the
+    # file sniffs as a keep-compressed datatype, it will not be decompressed. `ext` is only changed if dataset.file_type
+    # was `auto` and a keep-compressed datatype was sniffed.
+    try:
+        ext, dataset.path = sniff.handle_uploaded_dataset_file(
+            data.path,
+            registry,
+            ext=dataset.file_type,
+            tempfile_prefix='data_id_%s_upload_uncompress_' % data.dataset_id,
+            in_place=in_place,
+            check_content=check_content,
+        )
+    except sniff.InappropriateDatasetContentError as exc:
+        raise UploadProblemException(str(exc))
+
+    if dataset.file_type != 'auto':
+        ext = dataset.file_type
+    # FIXME: checking still needed if check_content is set! binaries should be checked by their sniffers as well.
+    # FIXME: but not all have sniffers
+    # FIXME: can use handle_uploaded_dataset_file instead?
+    else:
+    '''
+    elif is_binary:
+        # FIXME: should this still be separate??
         # Sniff the data type
-        guessed_ext = sniff.guess_ext(dataset.path, registry.sniff_order)
+        guessed_ext = sniff.guess_ext(dataset.path, registry.sniff_order, is_binary=True)
+        print('#### guessed extension: %s' % guessed_ext)
         # Set data_type only if guessed_ext is a binary datatype
         datatype = registry.get_datatype_by_extension(guessed_ext)
+        print('#### datatype: %s' % datatype)
         if isinstance(datatype, Binary):
             data_type = guessed_ext
             ext = guessed_ext
+    #if ext == 'auto':
+    print('#### data_type: %s' % data_type)
+    '''
+    '''
     if not data_type:
-        root_datatype = registry.get_datatype_by_extension(dataset.file_type)
         if getattr(root_datatype, 'compressed', False):
             data_type = 'compressed archive'
             ext = dataset.file_type
@@ -152,28 +227,8 @@ def add_file(dataset, registry, json_file, output_path):
                 raise UploadProblemException('The gzipped uploaded file contains inappropriate content')
             elif is_gzipped and is_valid and auto_decompress:
                 if not link_data_only:
-                    # We need to uncompress the temp_name file, but BAM files must remain compressed in the BGZF format
-                    CHUNK_SIZE = 2 ** 20  # 1Mb
-                    fd, uncompressed = tempfile.mkstemp(prefix='data_id_%s_upload_gunzip_' % dataset.dataset_id, dir=os.path.dirname(output_path), text=False)
-                    gzipped_file = gzip.GzipFile(dataset.path, 'rb')
-                    while 1:
-                        try:
-                            chunk = gzipped_file.read(CHUNK_SIZE)
-                        except IOError:
-                            os.close(fd)
-                            os.remove(uncompressed)
-                            raise UploadProblemException('Problem decompressing gzipped data')
-                        if not chunk:
-                            break
-                        os.write(fd, chunk)
-                    os.close(fd)
-                    gzipped_file.close()
-                    # Replace the gzipped file with the decompressed file if it's safe to do so
-                    if not in_place:
-                        dataset.path = uncompressed
-                    else:
-                        shutil.move(uncompressed, dataset.path)
-                    os.chmod(dataset.path, 0o644)
+	# We need to uncompress the temp_name file, but BAM files must remain compressed in the BGZF format
+                    decompress(FIXME)
                 dataset.name = dataset.name.rstrip('.gz')
                 data_type = 'gzip'
             if not data_type:
@@ -184,27 +239,6 @@ def add_file(dataset, registry, json_file, output_path):
                 elif is_bzipped and is_valid and auto_decompress:
                     if not link_data_only:
                         # We need to uncompress the temp_name file
-                        CHUNK_SIZE = 2 ** 20  # 1Mb
-                        fd, uncompressed = tempfile.mkstemp(prefix='data_id_%s_upload_bunzip2_' % dataset.dataset_id, dir=os.path.dirname(output_path), text=False)
-                        bzipped_file = bz2.BZ2File(dataset.path, 'rb')
-                        while 1:
-                            try:
-                                chunk = bzipped_file.read(CHUNK_SIZE)
-                            except IOError:
-                                os.close(fd)
-                                os.remove(uncompressed)
-                                raise UploadProblemException('Problem decompressing bz2 compressed data')
-                            if not chunk:
-                                break
-                            os.write(fd, chunk)
-                        os.close(fd)
-                        bzipped_file.close()
-                        # Replace the bzipped file with the decompressed file if it's safe to do so
-                        if not in_place:
-                            dataset.path = uncompressed
-                        else:
-                            shutil.move(uncompressed, dataset.path)
-                        os.chmod(dataset.path, 0o644)
                     dataset.name = dataset.name.rstrip('.bz2')
                     data_type = 'bz2'
             if not data_type:
@@ -294,6 +328,7 @@ def add_file(dataset, registry, json_file, output_path):
                 else:
                     ext = dataset.file_type
                 data_type = ext
+    '''
     # Save job info for the framework
     if ext == 'auto' and data_type == 'binary':
         ext = 'data'

@@ -13,7 +13,7 @@ import sys
 import tempfile
 import zipfile
 
-from six import text_type
+from six import filter, text_type
 
 from galaxy import util
 from galaxy.util import compression_utils
@@ -21,7 +21,8 @@ from galaxy.util.checkers import (
     check_binary,
     check_html,
     is_bz2,
-    is_gzip
+    is_gzip,
+    is_zip,
 )
 
 if sys.version_info < (3, 3):
@@ -271,7 +272,7 @@ def is_column_based(fname, sep='\t', skip=0):
     return True
 
 
-def guess_ext(fname, sniff_order):
+def guess_ext(fname, sniff_order, is_binary=False):
     """
     Returns an extension that can be used in the datatype factory to
     generate a data for the 'fname' file
@@ -395,7 +396,10 @@ def guess_ext(fname, sniff_order):
         successfully discovered.
         """
         try:
-            if datatype.sniff(fname):
+            print('######## guessing ext %s' % datatype)
+            print('#### is_binary: %s, datatype.is_binary: %s' % (is_binary, datatype.is_binary))
+            if ((is_binary and datatype.is_binary) or
+                    (not is_binary)) and datatype.sniff(fname):
                 file_ext = datatype.file_ext
                 break
         except Exception:
@@ -409,6 +413,9 @@ def guess_ext(fname, sniff_order):
     if file_ext is not None:
         return file_ext
 
+    # skip header check if data is already known to be binary
+    if binary:
+        return 'data'
     try:
         get_headers(fname, None)
     except UnicodeDecodeError:
@@ -418,36 +425,62 @@ def guess_ext(fname, sniff_order):
     return 'txt'  # default text data type file extension
 
 
-def handle_compressed_file(filename, datatypes_registry, ext='auto'):
+def zip_single_fileobj(path):
+    z = zipfile.ZipFile(path)
+    for name in z.namelist():
+        if not name.endswith('/'):
+            return z.open(name)
+
+
+def handle_compressed_file(
+        filename,
+        datatypes_registry,
+        ext='auto',
+        tempfile_prefix='sniff_uncompress_',
+        output_dir=None,
+        in_place=False,
+        check_content=True,
+    ):
+    """
+    Check uploaded files for compression, check compressed file contents, and uncompress if necessary.
+
+    Supports GZip, BZip2, and the first file in a Zip file.
+
+    For performance reasons, the temporary file used for uncompression is located in the same directory as the
+    input/output file. This behavior can be changed with the `output_dir` param.
+
+    ``ext`` as returned will only be changed from the ``ext`` input param if the param was an autodetect type (``auto``)
+    and the file was sniffed as a keep-compressed datatype.
+
+    ``is_valid`` as returned will only be set if the file is compressed and contains invalid contents (or the first file
+    in the case of a zip file), this is so lengthy decompression can be bypassed if there is invalid content in the
+    first 32KB. Otherwise the caller should be checking content.
+    """
     CHUNK_SIZE = 2 ** 20  # 1Mb
     is_compressed = False
     compressed_type = None
     keep_compressed = False
     is_valid = False
+    output_dir = output_dir or os.path.dirname(filename)
     for compressed_type, check_compressed_function in COMPRESSION_CHECK_FUNCTIONS:
-        is_compressed = check_compressed_function(filename)
+        is_compressed, is_valid = check_compressed_function(filename, check_content=check_content)
         if is_compressed:
             break  # found compression type
-    if is_compressed:
+    if is_compressed and is_valid:
         if ext in AUTO_DETECT_EXTENSIONS:
-            check_exts = COMPRESSION_DATATYPES[compressed_type]
-        elif ext in COMPRESSED_EXTENSIONS:
-            check_exts = [ext]
-        else:
-            check_exts = []
-        for compressed_ext in check_exts:
-            compressed_datatype = datatypes_registry.get_datatype_by_extension(compressed_ext)
-            if compressed_datatype.sniff(filename):
-                ext = compressed_ext
-                keep_compressed = True
-                is_valid = True
-                break
-
-    if not is_compressed:
-        is_valid = True
-    elif not keep_compressed:
-        is_valid = True
-        fd, uncompressed = tempfile.mkstemp()
+            # attempt to sniff for a keep-compressed datatype (observing the sniff order)
+            sniff_datatypes = filter(lambda d: d.file_ext in COMPRESSION_DATATYPES[compressed_type],
+                                     datatypes_registry.sniff_order)
+            for compressed_datatype in sniff_datatypes:
+                if compressed_datatype.sniff(filename):
+                    ext = compressed_ext
+                    break
+        if ext in COMPRESSED_EXTENSIONS:
+            # if a keep-compressed datatype is explicitly selected (or autodetected), honor the selection
+            keep_compressed = True
+    # don't waste time decompressing if we sniff invalid contents
+    if is_compressed and is_valid and not keep_compressed:
+        fd, uncompressed = tempfile.mkstemp(prefix=tempfile_prefix, dir=output_dir)
         compressed_file = DECOMPRESSION_FUNCTIONS[compressed_type](filename)
         while True:
             try:
@@ -462,32 +495,62 @@ def handle_compressed_file(filename, datatypes_registry, ext='auto'):
             os.write(fd, chunk)
         os.close(fd)
         compressed_file.close()
-        # Replace the compressed file with the uncompressed file
-        shutil.move(uncompressed, filename)
-    return is_valid, ext
+        if in_place:
+            # Replace the compressed file with the uncompressed file
+            shutil.move(uncompressed, filename)
+            uncompressed = filename
+    return is_valid, ext, uncompressed
 
 
-def handle_uploaded_dataset_file(filename, datatypes_registry, ext='auto'):
-    is_valid, ext = handle_compressed_file(filename, datatypes_registry, ext=ext)
+def handle_uploaded_dataset_file(
+        original_filename,
+        datatypes_registry,
+        ext='auto',
+        tempfile_prefix='sniff_uncompress_',
+        output_dir=None,
+        in_place=False,
+        check_content=True,
+    ):
+    def _clean_tempfile():
+        if filename != original_filename:
+            os.unlink(filename)
 
+    is_valid, ext, filename = handle_compressed_file(
+        filename,
+        datatypes_registry,
+        ext=ext,
+        tempfile_prefix=tempfile_prefix,
+        output_dir=output_dir,
+        in_place=in_place,
+        check_content=check_content
+    )
     if not is_valid:
+        _clean_tempfile()
         raise InappropriateDatasetContentError('The compressed uploaded file contains inappropriate content.')
 
+    is_binary = check_binary(filename)
     if ext in AUTO_DETECT_EXTENSIONS:
-        ext = guess_ext(filename, sniff_order=datatypes_registry.sniff_order)
+        ext = guess_ext(filename, sniff_order=datatypes_registry.sniff_order, is_binary=is_binary)
 
-    if check_binary(filename):
+    if is_binary:
         if not datatypes_registry.is_extension_unsniffable_binary(ext) and not datatypes_registry.get_datatype_by_extension(ext).sniff(filename):
+            _clean_tempfile()
             raise InappropriateDatasetContentError('The binary uploaded file contains inappropriate content.')
     elif check_html(filename):
+        _clean_tempfile()
         raise InappropriateDatasetContentError('The uploaded file contains inappropriate HTML content.')
-    return ext
+    return ext, filename
 
 
 AUTO_DETECT_EXTENSIONS = ['auto']  # should 'data' also cause auto detect?
-DECOMPRESSION_FUNCTIONS = dict(gzip=gzip.GzipFile, bz2=bz2.BZ2File)
-COMPRESSION_CHECK_FUNCTIONS = [('gzip', is_gzip), ('bz2', is_bz2)]
-COMPRESSION_DATATYPES = dict(gzip=['bam', 'fasta.gz', 'fastq.gz', 'fastqsanger.gz', 'fastqillumina.gz', 'fastqsolexa.gz', 'fastqcssanger.gz'], bz2=['fastq.bz2', 'fastqsanger.bz2', 'fastqillumina.bz2', 'fastqsolexa.bz2', 'fastqcssanger.bz2'])
+DECOMPRESSION_FUNCTIONS = dict(gzip=gzip.GzipFile, bz2=bz2.BZ2File, zip=zip_single_fileobj)
+COMPRESSION_CHECK_FUNCTIONS = [('gzip', check_gzip), ('bz2', check_bz2), ('zip', check_zip)]
+COMPRESSION_IS_FUNCTIONS = [('gzip', is_gzip), ('bz2', is_bz2), ('zip', is_zip)]
+COMPRESSION_DATATYPES = dict(
+    gzip=['bam', 'fasta.gz', 'fastq.gz', 'fastqsanger.gz', 'fastqillumina.gz', 'fastqsolexa.gz', 'fastqcssanger.gz'],
+    bz2=['fastq.bz2', 'fastqsanger.bz2', 'fastqillumina.bz2', 'fastqsolexa.bz2', 'fastqcssanger.bz2'],
+    zip=[],
+)
 COMPRESSED_EXTENSIONS = []
 for exts in COMPRESSION_DATATYPES.values():
     COMPRESSED_EXTENSIONS.extend(exts)
