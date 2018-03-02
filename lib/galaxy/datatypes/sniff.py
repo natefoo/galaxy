@@ -13,16 +13,21 @@ import sys
 import tempfile
 import zipfile
 
-from six import filter, text_type
+from six import text_type
+from six.moves import filter
 
 from galaxy import util
 from galaxy.util import compression_utils
 from galaxy.util.checkers import (
     check_binary,
+    check_bz2,
+    check_gzip,
     check_html,
+    check_zip,
     is_bz2,
     is_gzip,
     is_zip,
+    is_tar,
 )
 
 if sys.version_info < (3, 3):
@@ -414,7 +419,7 @@ def guess_ext(fname, sniff_order, is_binary=False):
         return file_ext
 
     # skip header check if data is already known to be binary
-    if binary:
+    if is_binary:
         return 'data'
     try:
         get_headers(fname, None)
@@ -499,7 +504,7 @@ def handle_compressed_file(
             # Replace the compressed file with the uncompressed file
             shutil.move(uncompressed, filename)
             uncompressed = filename
-    return is_valid, ext, uncompressed
+    return is_valid, ext, uncompressed, compressed_type
 
 
 def handle_uploaded_dataset_file(
@@ -515,8 +520,8 @@ def handle_uploaded_dataset_file(
         if filename != original_filename:
             os.unlink(filename)
 
-    is_valid, ext, filename = handle_compressed_file(
-        filename,
+    is_valid, ext, filename, compressed_type = handle_compressed_file(
+        original_filename,
         datatypes_registry,
         ext=ext,
         tempfile_prefix=tempfile_prefix,
@@ -525,8 +530,10 @@ def handle_uploaded_dataset_file(
         check_content=check_content
     )
     if not is_valid:
+        if is_tar(filename):
+            raise InappropriateDatasetContentError('TAR file uploads are not supported')
         _clean_tempfile()
-        raise InappropriateDatasetContentError('The compressed uploaded file contains inappropriate content.')
+        raise InappropriateDatasetContentError('The uploaded compressed file contains inappropriate content')
 
     is_binary = check_binary(filename)
     if ext in AUTO_DETECT_EXTENSIONS:
@@ -535,19 +542,19 @@ def handle_uploaded_dataset_file(
     if is_binary:
         if not datatypes_registry.is_extension_unsniffable_binary(ext) and not datatypes_registry.get_datatype_by_extension(ext).sniff(filename):
             _clean_tempfile()
-            raise InappropriateDatasetContentError('The binary uploaded file contains inappropriate content.')
+            raise InappropriateDatasetContentError('The uploaded binary file contains inappropriate content')
     elif check_html(filename):
         _clean_tempfile()
-        raise InappropriateDatasetContentError('The uploaded file contains inappropriate HTML content.')
-    return ext, filename
+        raise InappropriateDatasetContentError('The uploaded file contains inappropriate HTML content')
+    return ext, filename, compressed_type
 
 
 AUTO_DETECT_EXTENSIONS = ['auto']  # should 'data' also cause auto detect?
-DECOMPRESSION_FUNCTIONS = dict(gzip=gzip.GzipFile, bz2=bz2.BZ2File, zip=zip_single_fileobj)
-COMPRESSION_CHECK_FUNCTIONS = [('gzip', check_gzip), ('bz2', check_bz2), ('zip', check_zip)]
-COMPRESSION_IS_FUNCTIONS = [('gzip', is_gzip), ('bz2', is_bz2), ('zip', is_zip)]
+DECOMPRESSION_FUNCTIONS = dict(gz=gzip.GzipFile, bz2=bz2.BZ2File, zip=zip_single_fileobj)
+COMPRESSION_CHECK_FUNCTIONS = [('gz', check_gzip), ('bz2', check_bz2), ('zip', check_zip)]
+COMPRESSION_IS_FUNCTIONS = [('gz', is_gzip), ('bz2', is_bz2), ('zip', is_zip)]
 COMPRESSION_DATATYPES = dict(
-    gzip=['bam', 'fasta.gz', 'fastq.gz', 'fastqsanger.gz', 'fastqillumina.gz', 'fastqsolexa.gz', 'fastqcssanger.gz'],
+    gz=['bam', 'fasta.gz', 'fastq.gz', 'fastqsanger.gz', 'fastqillumina.gz', 'fastqsolexa.gz', 'fastqcssanger.gz'],
     bz2=['fastq.bz2', 'fastqsanger.bz2', 'fastqillumina.bz2', 'fastqsolexa.bz2', 'fastqcssanger.bz2'],
     zip=[],
 )

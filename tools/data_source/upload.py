@@ -25,7 +25,8 @@ from galaxy.util.checkers import (
     check_bz2,
     check_gzip,
     check_html,
-    check_zip
+    check_zip,
+    is_single_file_zip,
 )
 
 if sys.version_info < (3, 3):
@@ -126,7 +127,8 @@ gzip.GzipFile(dataset.path, 'rb')
 
 def add_file(dataset, registry, json_file, output_path):
     ext = None
-    containing_ext = None
+    guessed_ext = None
+    compression_type = None
     line_count = None
     converted_path = None
     stdout = None
@@ -182,17 +184,24 @@ def add_file(dataset, registry, json_file, output_path):
     # Decompress if needed. If a keep-compressed datatype is explicitly selected or if autodetection is selected and the
     # file sniffs as a keep-compressed datatype, it will not be decompressed. `ext` is only changed if dataset.file_type
     # was `auto` and a keep-compressed datatype was sniffed.
-    try:
-        ext, dataset.path = sniff.handle_uploaded_dataset_file(
-            data.path,
-            registry,
-            ext=dataset.file_type,
-            tempfile_prefix='data_id_%s_upload_uncompress_' % data.dataset_id,
-            in_place=in_place,
-            check_content=check_content,
-        )
-    except sniff.InappropriateDatasetContentError as exc:
-        raise UploadProblemException(str(exc))
+    if auto_decompress and not link_data_only:
+        if is_zip(data.path) and not is_single_file_zip(data.path):
+            stdout = 'ZIP file contained more than one file, only the first file was added to Galaxy.'
+        try:
+            ext, data.path, compression_type = sniff.handle_uploaded_dataset_file(
+                data.path,
+                registry,
+                ext=dataset.file_type,
+                tempfile_prefix='data_id_%s_upload_uncompress_' % data.dataset_id,
+                in_place=in_place,
+                check_content=check_content,
+            )
+        except sniff.InappropriateDatasetContentError as exc:
+            raise UploadProblemException(str(exc))
+
+        if compression_type:
+            # strip compression extension from name
+            dataset.name = dataset.name[::-1].replace(compression_type[::-1] + '.', '', 1)[::-1]
 
     if dataset.file_type != 'auto':
         ext = dataset.file_type
@@ -200,6 +209,15 @@ def add_file(dataset, registry, json_file, output_path):
     # FIXME: but not all have sniffers
     # FIXME: can use handle_uploaded_dataset_file instead?
     else:
+        guessed_ext = sniff.guess_ext(dataset.path, registry.sniff_order, is_binary=is_binary)
+        datatype = registry.get_datatype_by_extension(guessed_ext)
+    if is_binary and guessed_ext == 'data':
+        upload_ext = os.path.splitext(data.name)[1].lower().lstrip('.')
+        if registry.is_extension_unsniffable_binary(upload_ext):
+            raise UploadProblemException(
+                "You must manually set the file 'Type' to '{ext}' when uploading {ext} files".format(ext=upload_ext)
+            )
+        raise UploadProblemException('The uploaded binary file format cannot be determined')
     '''
     elif is_binary:
         # FIXME: should this still be separate??

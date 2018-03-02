@@ -1,9 +1,11 @@
 import gzip
 import re
 import sys
+import tarfile
 import zipfile
 
 from six import StringIO
+from six.moves import filter
 
 from galaxy import util
 from galaxy.util.image_util import image_type
@@ -124,8 +126,7 @@ def check_bz2(file_path, check_content=True):
     return (True, True)
 
 
-def check_zip(file_path, check_content=True):
-    # note this only checks the first file in a zip
+def check_zip(file_path, check_content=True, files=1):
     if not zipfile.is_zipfile(file_path):
         return (False, False)
 
@@ -134,14 +135,14 @@ def check_zip(file_path, check_content=True):
 
     CHUNK_SIZE = 2 ** 15  # 32Kb
     chunk = None
-    with zipfile.ZipFile(path) as zip_archive:
-        for name in zip_archive.namelist():
-            if not name.endswith('/'):
-                chunk = z.open(name).read(CHUNK_SIZE)
-                break
-    if chunk:
-        return (True, not check_html(file_path, chunk))
-    return (True, False)
+    for filect, member in enumerate(iter_zip(file_path)):
+        handle, name = member
+        chunk = handle.read(CHUNK_SIZE)
+        if chunk and check_html(file_path, chunk):
+            return (True, False)
+        if filect >= files:
+            break
+    return (True, True)
 
 
 def is_bz2(file_path):
@@ -157,6 +158,23 @@ def is_gzip(file_path):
 def is_zip(file_path):
     is_zipped, is_valid = check_zip(file_path, check_content=False)
     return is_zipped
+
+
+def is_single_file_zip(file_path):
+    for i, member in enumerate(iter_zip(file_path)):
+        if i > 1:
+            return False
+    return True
+
+
+def is_tar(file_path):
+    return tarfile.is_tarfile(file_path)
+
+
+def iter_zip(file_path):
+    with zipfile.ZipFile(file_path) as z:
+        for f in filter(lambda x: not x.endswith('/'), z.namelist()):
+            yield (z.open(f), f)
 
 
 def check_image(file_path):
