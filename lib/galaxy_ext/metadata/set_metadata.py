@@ -34,6 +34,24 @@ log = logging.getLogger(__name__)
 galaxy.model.Job()  # this looks REAL stupid, but it is REQUIRED in order for SA to insert parameters into the classes defined by the mappers --> it appears that instantiating ANY mapper'ed class would suffice here
 
 
+def __read_job_metadata(path):
+    datasets = []
+    with open(path) as fh:
+        obj = load(fh)
+    for k, v in obj.values():
+        if 'dataset_id' in v:
+            datasets 
+    return datasets
+
+
+def __read_old_job_metadata(path):
+    datasets = []
+    with open(path) as fh:
+        for line in fh:
+            datasets.append(loads(line))
+    return datasets
+
+
 def set_meta_with_tool_provided(dataset_instance, file_dict, set_meta_kwds, datatypes_registry):
     # This method is somewhat odd, in that we set the metadata attributes from tool,
     # then call set_meta, then set metadata attributes from tool again.
@@ -100,15 +118,19 @@ def set_metadata():
     existing_job_metadata_dict = {}
     new_job_metadata_dict = {}
     if job_metadata != "None" and os.path.exists(job_metadata):
-        for line in open(job_metadata, 'r'):
-            try:
-                line = stringify_dictionary_keys(json.loads(line))
-                if line['type'] == 'dataset':
-                    existing_job_metadata_dict[line['dataset_id']] = line
-                elif line['type'] == 'new_primary_dataset':
-                    new_job_metadata_dict[line['filename']] = line
-            except Exception:
-                continue
+        try:
+            datasets = __read_paramfile(sys.argv[3])
+        except (ValueError, AttributeError, AssertionError):
+            datasets = __read_old_paramfile(sys.argv[3])
+        try:
+            for dataset in datasets:
+                dataset = stringify_dictionary_keys(dataset)
+                if dataset['type'] == 'dataset':
+                    existing_job_metadata_dict[dataset['dataset_id']] = dataset
+                elif dataset['type'] == 'new_primary_dataset':
+                    new_job_metadata_dict[dataset['filename']] = dataset
+        except Exception:
+            continue
 
     for filenames in sys.argv[1:]:
         fields = filenames.split(',')
@@ -163,7 +185,6 @@ def set_metadata():
         file_dict['metadata'] = json.loads(new_dataset_instance.metadata.to_JSON_dict())  # storing metadata in external form, need to turn back into dict, then later jsonify
     if existing_job_metadata_dict or new_job_metadata_dict:
         with open(job_metadata, 'wb') as job_metadata_fh:
-            for value in list(existing_job_metadata_dict.values()) + list(new_job_metadata_dict.values()):
-                job_metadata_fh.write("%s\n" % (json.dumps(value)))
+            json.dump(list(existing_job_metadata_dict.values()) + list(new_job_metadata_dict.values()), job_metadata_fh)
 
     clear_mappers()

@@ -12,7 +12,7 @@ import shutil
 import sys
 import tempfile
 import zipfile
-from json import dumps, loads
+from json import dump, load, loads
 
 from six.moves.urllib.request import urlopen
 
@@ -27,6 +27,7 @@ from galaxy.util.checkers import (
     check_html,
     check_zip,
     is_single_file_zip,
+    is_zip,
 )
 
 if sys.version_info < (3, 3):
@@ -43,19 +44,18 @@ class UploadProblemException(Exception):
         self.message = message
 
 
-def file_err(msg, dataset, json_file):
-    json_file.write(dumps(dict(type='dataset',
-                               ext='data',
-                               dataset_id=dataset.dataset_id,
-                               stderr=msg,
-                               failed=True)) + "\n")
+def file_err(msg, dataset):
     # never remove a server-side upload
-    if dataset.type in ('server_dir', 'path_paste'):
-        return
-    try:
-        os.remove(dataset.path)
-    except Exception:
-        pass
+    if dataset.type not in ('server_dir', 'path_paste'):
+        try:
+            os.remove(dataset.path)
+        except Exception:
+            pass
+    return dict(type='dataset',
+                ext='data',
+                dataset_id=dataset.dataset_id,
+                stderr=msg,
+                failed=True)
 
 
 def safe_dict(d):
@@ -79,53 +79,7 @@ def parse_outputs(args):
     return rval
 
 
-def unix_uncompress(dataset, registry, json_file, output_path, compression_class):
-	CHUNK_SIZE = 2 ** 20  # 1Mb
-	fd, uncompressed = tempfile.mkstemp(prefix='data_id_%s_upload_uncompress_' % dataset.dataset_id, dir=os.path.dirname(output_path), text=False)
-	compressed_file = compression_class(dataset.path, 'rb')
-gzip.GzipFile(dataset.path, 'rb')
-	while 1:
-		try:
-			chunk = gzipped_file.read(CHUNK_SIZE)
-		except IOError:
-			os.close(fd)
-			os.remove(uncompressed)
-			raise UploadProblemException('Problem decompressing gzipped data')
-		if not chunk:
-			break
-		os.write(fd, chunk)
-	os.close(fd)
-	gzipped_file.close()
-	# Replace the gzipped file with the decompressed file if it's safe to do so
-	if not in_place:
-		dataset.path = uncompressed
-	else:
-		shutil.move(uncompressed, dataset.path)
-	os.chmod(dataset.path, 0o644)
-
-	CHUNK_SIZE = 2 ** 20  # 1Mb
-	fd, uncompressed = tempfile.mkstemp(prefix='data_id_%s_upload_bunzip2_' % dataset.dataset_id, dir=os.path.dirname(output_path), text=False)
-	bzipped_file = bz2.BZ2File(dataset.path, 'rb')
-	while 1:
-		try:
-			chunk = bzipped_file.read(CHUNK_SIZE)
-		except IOError:
-			os.close(fd)
-			os.remove(uncompressed)
-			raise UploadProblemException('Problem decompressing bz2 compressed data')
-		if not chunk:
-			break
-		os.write(fd, chunk)
-	os.close(fd)
-	bzipped_file.close()
-	# Replace the bzipped file with the decompressed file if it's safe to do so
-	if not in_place:
-		dataset.path = uncompressed
-	else:
-		shutil.move(uncompressed, dataset.path)
-	os.chmod(dataset.path, 0o644)
-
-def add_file(dataset, registry, json_file, output_path):
+def add_file(dataset, registry, output_path):
     ext = None
     guessed_ext = None
     compression_type = None
@@ -185,14 +139,14 @@ def add_file(dataset, registry, json_file, output_path):
     # file sniffs as a keep-compressed datatype, it will not be decompressed. `ext` is only changed if dataset.file_type
     # was `auto` and a keep-compressed datatype was sniffed.
     if auto_decompress and not link_data_only:
-        if is_zip(data.path) and not is_single_file_zip(data.path):
+        if is_zip(dataset.path) and not is_single_file_zip(dataset.path):
             stdout = 'ZIP file contained more than one file, only the first file was added to Galaxy.'
         try:
-            ext, data.path, compression_type = sniff.handle_uploaded_dataset_file(
-                data.path,
+            ext, dataset.path, compression_type = sniff.handle_uploaded_dataset_file(
+                dataset.path,
                 registry,
                 ext=dataset.file_type,
-                tempfile_prefix='data_id_%s_upload_uncompress_' % data.dataset_id,
+                tempfile_prefix='data_id_%s_upload_uncompress_' % dataset.dataset_id,
                 in_place=in_place,
                 check_content=check_content,
             )
@@ -211,8 +165,8 @@ def add_file(dataset, registry, json_file, output_path):
     else:
         guessed_ext = sniff.guess_ext(dataset.path, registry.sniff_order, is_binary=is_binary)
         datatype = registry.get_datatype_by_extension(guessed_ext)
-    if is_binary and guessed_ext == 'data':
-        upload_ext = os.path.splitext(data.name)[1].lower().lstrip('.')
+    if is_binary and guessed_ext and guessed_ext == 'data':
+        upload_ext = os.path.splitext(dataset.name)[1].lower().lstrip('.')
         if registry.is_extension_unsniffable_binary(upload_ext):
             raise UploadProblemException(
                 "You must manually set the file 'Type' to '{ext}' when uploading {ext} files".format(ext=upload_ext)
@@ -348,12 +302,12 @@ def add_file(dataset, registry, json_file, output_path):
                 data_type = ext
     '''
     # Save job info for the framework
-    if ext == 'auto' and data_type == 'binary':
-        ext = 'data'
-    if ext == 'auto' and dataset.ext:
-        ext = dataset.ext
-    if ext == 'auto':
-        ext = 'data'
+    #if ext == 'auto' and data_type == 'binary':
+    #    ext = 'data'
+    #if ext == 'auto' and dataset.ext:
+    #    ext = dataset.ext
+    #if ext == 'auto':
+    #    ext = 'data'
     datatype = registry.get_datatype_by_extension(ext)
     if dataset.type in ('server_dir', 'path_paste') and link_data_only:
         # Never alter a file that will not be copied to Galaxy's local file store.
@@ -375,7 +329,7 @@ def add_file(dataset, registry, json_file, output_path):
         else:
             shutil.copy(dataset.path, output_path)
     # Write the job info
-    stdout = stdout or 'uploaded %s file' % data_type
+    stdout = stdout or 'uploaded %s file' % ext #data_type
     info = dict(type='dataset',
                 dataset_id=dataset.dataset_id,
                 ext=ext,
@@ -384,13 +338,13 @@ def add_file(dataset, registry, json_file, output_path):
                 line_count=line_count)
     if dataset.get('uuid', None) is not None:
         info['uuid'] = dataset.get('uuid')
-    json_file.write(dumps(info) + "\n")
     if not link_data_only and datatype and datatype.dataset_content_needs_grooming(output_path):
         # Groom the dataset content if necessary
         datatype.groom_dataset_content(output_path)
+    return info
 
 
-def add_composite_file(dataset, json_file, output_path, files_path):
+def add_composite_file(dataset, output_path, files_path):
     if dataset.composite_files:
         os.mkdir(files_path)
         for name, value in dataset.composite_files.items():
@@ -418,10 +372,25 @@ def add_composite_file(dataset, json_file, output_path, files_path):
     # Move the dataset to its "real" path
     shutil.move(dataset.primary_file, output_path)
     # Write the job info
-    info = dict(type='dataset',
-                dataset_id=dataset.dataset_id,
-                stdout='uploaded %s file' % dataset.file_type)
-    json_file.write(dumps(info) + "\n")
+    return = dict(type='dataset',
+                  dataset_id=dataset.dataset_id,
+                  stdout='uploaded %s file' % dataset.file_type)
+
+
+def __read_paramfile(path):
+    with open(path) as fh:
+        obj = load(fh)
+    # If there's a single dataset in an old-style paramfile it'll still parse, but it'll be a dict
+    assert type(obj) == list
+    return obj
+
+
+def __read_old_paramfile(path):
+    datasets = []
+    with open(path) as fh:
+        for line in fh:
+            datasets.append(loads(line))
+    return datasets
 
 
 def output_adjacent_tmpdir(output_path):
@@ -444,9 +413,15 @@ def __main__():
     registry = Registry()
     registry.load_datatypes(root_dir=sys.argv[1], config=sys.argv[2])
 
-    for line in open(sys.argv[3], 'r'):
-        dataset = loads(line)
+    try:
+        datasets = __read_paramfile(sys.argv[3])
+    except (ValueError, AssertionError):
+        datasets = __read_old_paramfile(sys.argv[3])
+
+    results = {}
+    for i, dataset in enumerate(datasets):
         dataset = util.bunch.Bunch(**safe_dict(dataset))
+        output_name = 'output%s' % i
         try:
             output_path = output_paths[int(dataset.dataset_id)][0]
         except Exception:
@@ -455,18 +430,13 @@ def __main__():
         try:
             if dataset.type == 'composite':
                 files_path = output_paths[int(dataset.dataset_id)][1]
-                add_composite_file(dataset, json_file, output_path, files_path)
+                results[output_name] = add_composite_file(dataset, output_path, files_path)
             else:
-                add_file(dataset, registry, json_file, output_path)
+                results[output_name] = add_file(dataset, registry, output_path)
         except UploadProblemException as e:
-            file_err(e.message, dataset, json_file)
-    # clean up paramfile
-    # TODO: this will not work when running as the actual user unless the
-    # parent directory is writable by the user.
-    try:
-        os.remove(sys.argv[3])
-    except Exception:
-        pass
+            results[output_name] = file_err(e.message, dataset)
+    with open('galaxy.json', 'w') as fh:
+        dump(results, fh)
 
 
 if __name__ == '__main__':

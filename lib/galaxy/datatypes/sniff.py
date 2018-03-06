@@ -466,6 +466,7 @@ def handle_compressed_file(
     compressed_type = None
     keep_compressed = False
     is_valid = False
+    uncompressed = filename
     output_dir = output_dir or os.path.dirname(filename)
     for compressed_type, check_compressed_function in COMPRESSION_CHECK_FUNCTIONS:
         is_compressed, is_valid = check_compressed_function(filename, check_content=check_content)
@@ -504,6 +505,8 @@ def handle_compressed_file(
             # Replace the compressed file with the uncompressed file
             shutil.move(uncompressed, filename)
             uncompressed = filename
+    elif not is_compressed:
+        is_valid = True
     return is_valid, ext, uncompressed, compressed_type
 
 
