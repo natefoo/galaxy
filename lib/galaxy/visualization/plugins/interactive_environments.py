@@ -454,7 +454,7 @@ class InteractiveEnvironmentRequest(object):
             log.warning("Sleeping for 2 seconds while waiting for container %s ports", container.id)
             time.sleep(2)
             container_ports = container.ports
-        if container_port is None:
+        if container_ports is None:
             raise Exception("Failed to determine ports for container '%s' after 30 attempts" % container.id)
         container_port = self._find_port_mapping(container_ports)
         log.debug("Container '%s' accessible at: %s:%s", container.id, container_port.hostaddr, container_port.hostport)
