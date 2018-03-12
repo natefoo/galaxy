@@ -85,7 +85,11 @@ class DockerContainer(Container):
         #                 }
         #             ]
         rval = []
-        port_mappings = self.inspect[0]['NetworkSettings']['Ports']
+        try:
+            port_mappings = self.inspect[0]['NetworkSettings']['Ports']
+        except (IndexError, KeyError) as exc:
+            log.warning("Failed to get ports for container %s: %s", self.id, str(exc))
+            return None
         for port_name in port_mappings:
             for binding in port_mappings[port_name]:
                 rval.append(ContainerPort(
@@ -165,7 +169,11 @@ class DockerService(Container):
         #             }
         #         ]
         rval = []
-        port_mappings = self.inspect[0]['Endpoint']['Ports']
+        try:
+            port_mappings = self.inspect[0]['Endpoint']['Ports']
+        except (IndexError, KeyError) as exc:
+            log.warning("Failed to get ports for container %s: %s", self._id, str(exc))
+            return None
         for binding in port_mappings:
             rval.append(ContainerPort(
                 binding['TargetPort'],
