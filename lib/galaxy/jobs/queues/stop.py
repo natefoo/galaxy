@@ -1,48 +1,133 @@
 """
-Galaxy job handler, prepares, runs, tracks, and finishes Galaxy jobs
+Stop queue to handle stopping jobs asynchronously
 """
 from __future__ import absolute_import
 
 import logging
+import os
+import time
 
-from galaxy import model
-from . import (
+from six.moves.queue import (
+    Empty,
+    Queue
+)
+
+from .. import (
     JobDestination,
-    queues,
     TaskWrapper
 )
-from .queues import (
-    JobHandlerQueue,
-    JobHandlerStopQueue
-)
+from ... import model
+from ...util.monitors import Monitors
 
 log = logging.getLogger(__name__)
 
-DEFAULT_JOB_PUT_FAILURE_MESSAGE = 'Unable to run job due to a misconfiguration of the Galaxy job running system.  Please contact a site administrator.'
 
-
-# TODO: Expire NEW and LIMITED jobs (gc thread or cleanup script)
-
-class JobHandler(object):
+class JobHandlerStopQueue(Monitors):
     """
-    Handle the preparation, running, tracking, and finishing of jobs
+    A queue for jobs which need to be terminated prematurely.
     """
+    STOP_SIGNAL = object()
 
-    def __init__(self, app):
+    def __init__(self, app, dispatcher):
         self.app = app
-        # The dispatcher launches the underlying job runners
-        self.dispatcher = DefaultJobDispatcher(app)
-        # Queues for starting and stopping jobs
-        self.job_queue = JobHandlerQueue(app, self.dispatcher)
-        self.job_stop_queue = JobHandlerStopQueue(app, self.dispatcher)
+        self.dispatcher = dispatcher
+
+        self.sa_session = app.model.context
+
+        # Keep track of the pid that started the job manager, only it
+        # has valid threads
+        self.parent_pid = os.getpid()
+        # Contains new jobs. Note this is not used if track_jobs_in_database is True
+        self.queue = Queue()
+
+        # Contains jobs that are waiting (only use from monitor thread)
+        self.waiting = []
+
+        name = "JobHandlerStopQueue.monitor_thread"
+        self._init_monitor_thread(name, config=app.config)
+        log.info("job handler stop queue started")
 
     def start(self):
-        self.job_queue.start()
-        self.job_stop_queue.start()
+        # Start the queue
+        self.monitor_thread.start()
+        log.info("job handler stop queue started")
+
+    def monitor(self):
+        """
+        Continually iterate the waiting jobs, stop any that are found.
+        """
+        # HACK: Delay until after forking, we need a way to do post fork notification!!!
+        time.sleep(10)
+        while self.monitor_running:
+            try:
+                self.monitor_step()
+            except Exception:
+                log.exception("Exception in monitor_step")
+            # Sleep
+            self._monitor_sleep(1)
+
+    def monitor_step(self):
+        """
+        Called repeatedly by `monitor` to stop jobs.
+        """
+        # Pull all new jobs from the queue at once
+        jobs_to_check = []
+        if self.app.config.track_jobs_in_database:
+            # Clear the session so we get fresh states for job and all datasets
+            self.sa_session.expunge_all()
+            # Fetch all new jobs
+            newly_deleted_jobs = self.sa_session.query(model.Job).enable_eagerloads(False) \
+                                     .filter((model.Job.state == model.Job.states.DELETED_NEW) &
+                                             (model.Job.handler == self.app.config.server_name)).all()
+            for job in newly_deleted_jobs:
+                jobs_to_check.append((job, job.stderr))
+        # Also pull from the queue (in the case of Administrative stopped jobs)
+        try:
+            while 1:
+                message = self.queue.get_nowait()
+                if message is self.STOP_SIGNAL:
+                    return
+                # Unpack the message
+                job_id, error_msg = message
+                # Get the job object and append to watch queue
+                jobs_to_check.append((self.sa_session.query(model.Job).get(job_id), error_msg))
+        except Empty:
+            pass
+        for job, error_msg in jobs_to_check:
+            if (job.state not in
+                    (job.states.DELETED_NEW,
+                     job.states.DELETED) and
+                    job.finished):
+                # terminated before it got here
+                log.debug('Job %s already finished, not deleting or stopping', job.id)
+                continue
+            final_state = job.states.DELETED
+            if error_msg is not None:
+                final_state = job.states.ERROR
+                job.info = error_msg
+            job.set_final_state(final_state)
+            self.sa_session.add(job)
+            self.sa_session.flush()
+            if job.job_runner_name is not None:
+                # tell the dispatcher to stop the job
+                self.dispatcher.stop(job)
+
+    def put(self, job_id, error_msg=None):
+        if not self.app.config.track_jobs_in_database:
+            self.queue.put((job_id, error_msg))
 
     def shutdown(self):
-        self.job_queue.shutdown()
-        self.job_stop_queue.shutdown()
+        """Attempts to gracefully shut down the worker thread"""
+        if self.parent_pid != os.getpid():
+            # We're not the real job queue, do nothing
+            return
+        else:
+            log.info("sending stop signal to worker thread")
+            self.stop_monitoring()
+            if not self.app.config.track_jobs_in_database:
+                self.queue.put(self.STOP_SIGNAL)
+            self.shutdown_monitor()
+            log.info("job handler stop queue stopped")
 
 
 class DefaultJobDispatcher(object):
