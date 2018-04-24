@@ -13,7 +13,7 @@ function message_failed_auth(password){
 function message_failed_connection(){
     toastr.error(
         "Could not connect to Jupyter Notebook. Please contact your administrator. <a href='https://github.com/bgruening/galaxy-ipython/wiki/Could-not-connect-to-IPython-Notebook' target='_blank'>More details ...</a>",
-    "Security warning",
+        "Security warning",
         {'closeButton': true, 'timeOut': 20000, 'tapToDismiss': true}
     );
 }

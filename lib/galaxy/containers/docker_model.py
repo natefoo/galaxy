@@ -4,19 +4,21 @@ Model objects for docker objects
 from __future__ import absolute_import
 
 import logging
+from collections import namedtuple
+from datetime import datetime
 
 try:
     import docker
 except ImportError:
-    from galaxy.util.bunch import Bunch
-    docker = Bunch(errors=Bunch(NotFound=None))
+    docker = namedtuple('docker', ['errors'])(
+        namedtuple('errors', ['NotFound'])(None)
+    )
 
 from galaxy.containers import (
     Container,
     ContainerPort,
     ContainerVolume
 )
-from galaxy.util import pretty_print_time_interval
 
 
 CPUS_LABEL = '_galaxy_cpus'
@@ -157,6 +159,17 @@ class DockerContainer(Container):
     def is_ready(self):
         return self.inspect['State']['Running']
 
+    @property
+    def state(self):
+        return self.inspect['State']['Status']
+
+    @property
+    def state_change_time(self):
+        try:
+            return docker_stamp_to_python(self.inspect['State']['StartedAt'])
+        except TypeError:
+            return None
+
     def __eq__(self, other):
         return self._id == other.id
 
@@ -261,6 +274,17 @@ class DockerService(Container):
         return self._inspect
 
     @property
+    def _best_task(self):
+        """If one of this service's tasks desired state is running, return that task, otherwise, return a non-running
+        task (or None if there are no tasks).
+        """
+        task = None
+        for task in self.tasks:
+            if task.desired_state == 'running':
+                break
+        return task
+
+    @property
     def state(self):
         """If one of this service's tasks desired state is running, return that task state, otherwise, return the state
         of a non-running task.
@@ -268,12 +292,18 @@ class DockerService(Container):
         This is imperfect because it doesn't attempt to provide useful information for replicas > 1 tasks, but it suits
         our purposes for now.
         """
-        state = None
-        for task in self.tasks:
-            state = task.state
-            if task.desired_state == 'running':
-                break
-        return state
+        task = self._best_task
+        if task:
+            return task.state
+        else:
+            return None
+
+    @property
+    def state_change_time(self):
+        try:
+            return docker_stamp_to_python(self.inspect['UpdatedAt'])
+        except TypeError:
+            return None
 
     @property
     def env(self):
@@ -732,9 +762,11 @@ class DockerTask(object):
         except KeyError:
             return 0
 
+    # FIXME: who accesses this?
     @property
     def state(self):
-        return ('%s-%s' % (self._desired_state, self._state)).lower()
+        return str(self._state).lower()
+        #return ('%s-%s' % (self._desired_state, self._state)).lower()
 
     @property
     def current_state(self):
@@ -745,13 +777,11 @@ class DockerTask(object):
             return None
 
     @property
-    def current_state_time(self):
-        # Docker API returns a stamp w/ higher second precision than Python takes
+    def state_change_time(self):
         try:
-            stamp = self.inspect['Status']['Timestamp']
+            return docker_stamp_to_python(self.inspect['Status']['Timestamp'])
         except TypeError:
             return None
-        return pretty_print_time_interval(time=stamp[:stamp.index('.') + 7], precise=True, utc=stamp[-1] == 'Z')
 
     @property
     def desired_state(self):
@@ -767,3 +797,14 @@ class DockerTask(object):
 
     def in_state(self, desired, current):
         return self.desired_state == desired.lower() and self.current_state == current.lower()
+
+
+def docker_stamp_to_python(stamp):
+    """Convert Docker API timestamp to a python datetime object."""
+    # Docker API returns a stamp w/ higher second precision than Python takes
+    try:
+        assert stamp[-1] == 'Z', "Error: Docker API time stamp is not UTC!: %s" % stamp
+        return datetime.strptime(stamp[:stamp.index('.') + 7], "%Y-%m-%dT%H:%M:%S.%f")
+    except TypeError:
+        log.exception("Failed to convert time")
+        return None

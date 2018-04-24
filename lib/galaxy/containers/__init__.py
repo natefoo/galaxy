@@ -22,6 +22,7 @@ from six import string_types, with_metaclass
 from six.moves import shlex_quote
 
 from galaxy.exceptions import ContainerCLIError
+from galaxy.util import pretty_print_time_interval
 from galaxy.util.submodules import submodules
 
 
@@ -103,6 +104,11 @@ class Container(with_metaclass(ABCMeta, object)):
         """The container's name"""
         return self._name
 
+    @property
+    def human_state_change_time(self):
+        """Time since the last state change in human readable format"""
+        return pretty_print_time_interval(time=self.state_change_time, precise=True, utc=True)
+
     @abstractmethod
     def from_id(cls, interface, id):
         """Classmethod to create an instance of Container from the container system's id for the given container type.
@@ -136,7 +142,22 @@ class Container(with_metaclass(ABCMeta, object)):
         """Indicate whether or not the container is "ready" (up, available, running).
 
         :returns:   True if ready, else False
-        :rtpe:      bool
+        :rtype:      bool
+        """
+
+    @abstractmethod
+    def state(self):
+        """A string indicating the current state of the container.
+
+        :returns:   Current state of container
+        :rtype:     str
+        """
+    @abstractmethod
+    def state_change_time(self):
+        """Time of the last state change
+
+        :returns:   Time of the last state change, in UTC
+        :rtype:     :py:class:`datetime.datetime` instance
         """
 
 

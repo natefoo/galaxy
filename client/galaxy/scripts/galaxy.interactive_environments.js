@@ -43,6 +43,8 @@ export function make_spin_state(
         sleep_max: typeof sleep_max !== "undefined" ? sleep_max : 8000,
         sleep_step: typeof sleep_step !== "undefined" ? sleep_step : 100,
         log_attempts: typeof log_attempts !== "undefined" ? log_attempts : true,
+        called_success_callback: false,
+        last_state: 'new',
         count: 0
     };
     return s;
@@ -194,7 +196,7 @@ export function test_ie_availability(url, success_callback) {
  * @param {String} callback: function to call once successfully connected.
  *
  */
-export function load_when_ready(url, success_callback) {
+export function load_when_ready(url, call_when_ready) {
     var messages = {
         success: "Galaxy reports IE container ready, returning",
         not_ready: "Galaxy is launching a container in which to run this interactive environment. Please wait...",
@@ -206,6 +208,43 @@ export function load_when_ready(url, success_callback) {
         error:
             "Galaxy encountered an error while attempting to determine the readiness of this interactive environment's container, contact a Galaxy administrator."
     };
-    var spin_state = make_spin_state("IE container readiness");
-    spin_until(url, true, messages, success_callback, spin_state);
+    //var spin_state = make_spin_state("IE container readiness");
+    var spin_state = make_spin_state("IE container state", 2000, 16000, 500, 500, 30000, 500, false);
+    var success_callback = function(data, status, jqxhr) {
+        if (data[0].state != spin_state.last_state) {
+            toastr.info(
+                "Container state changed from " + spin_state.last_state + " to " + data[0].state,
+                "Info",
+                {'closeButton': true, 'timeOut': 20000, 'tapToDismiss': true}
+            );
+            spin_state.last_state = data[0].state;
+        }
+        if (data[0].state == 'running' && !spin_state.called_success_callback) {
+            call_when_ready();
+            spin_state.called_success_callback = true;
+        } else if (data[0]['terminal']) {
+            toastr.error(
+                "The container for this Galaxy Interactive Environment terminated " + data[0].state_change_interval + ".",
+                "Terminated",
+                {'closeButton': true, 'timeOut': 100000, 'tapToDismiss': false}
+            );
+            return true;
+        }
+        return false;  // keep spinning
+
+    }
+    var timeout_error = (jqxhr, status, error) => {
+        message_once(messages["waiting"], spin_state);
+        if (spin_state.count == warn_at) {
+            toastr.warning(messages["wait_warn"], "Warning", {
+                closeButton: true,
+                timeOut: 0,
+                extendedTimeOut: 0,
+                tapToDismiss: false
+            });
+        }
+        return false; // keep spinning
+    };
+    spin(url, true, success_callback, timeout_error, timeout_error, spin_state);
+    //spin_until(url, true, messages, success_callback, spin_state);
 }
