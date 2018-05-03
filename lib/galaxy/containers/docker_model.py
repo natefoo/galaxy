@@ -453,10 +453,10 @@ class DockerNode(object):
         self._manager = manager
         self._inspect = inspect
         if inspect:
-            self._name = name or inspect['Description']['Hostname']
-            self._status = status or inspect['Status']['State']
-            self._availability = inspect['Spec']['Availability']
-            self._manager = manager or inspect['Spec']['Role'] == 'manager'
+            self._name = name or inspect.get('Description', {}).get('Hostname', None)
+            self._status = status or inspect.get('Status', {}).get('State', None)
+            self._availability = inspect.get('Spec', {}).get('Availability', None)
+            self._manager = manager or inspect.get('Spec', {}).get('Role', None) == 'manager'
         self._tasks = []
 
     @classmethod
