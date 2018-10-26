@@ -1,4 +1,4 @@
-"""Web Application Stack worker messaging
+"""Message formatting
 """
 from __future__ import absolute_import
 
@@ -10,44 +10,7 @@ import six
 log = logging.getLogger(__name__)
 
 
-class ApplicationStackMessageDispatcher(object):
-    def __init__(self):
-        self.__funcs = {}
-
-    def __func_name(self, func, name):
-        if not name:
-            name = func.__name__
-        return name
-
-    def register_func(self, func, name=None):
-        name = self.__func_name(func, name)
-        self.__funcs[name] = func
-
-    def deregister_func(self, func=None, name=None):
-        name = self.__func_name(func, name)
-        try:
-            del self.__funcs[name]
-        except KeyError:
-            pass
-
-    @property
-    def handler_count(self):
-        return len(self.__funcs)
-
-    def dispatch(self, msg_str):
-        msg = decode(msg_str)
-        try:
-            msg.validate()
-        except AssertionError as exc:
-            log.error('Invalid message received: %s, error: %s', msg_str, exc)
-            return
-        if msg.target not in self.__funcs:
-            log.error("Received message with target '%s' but no functions were registered with that name. Params were: %s", msg.target, msg.params)
-        else:
-            self.__funcs[msg.target](msg)
-
-
-class ApplicationStackMessage(dict):
+class Message(dict):
     target = None
     default_handler = None
     _validate_kwargs = ('target',)
@@ -105,7 +68,7 @@ class ApplicationStackMessage(dict):
         self['target'] = target
 
 
-class ParamMessage(ApplicationStackMessage):
+class ParamMessage(Message):
     _validate_kwargs = ('params',)
     _validate_params = ()
     _exclude_params = ()
@@ -160,9 +123,3 @@ class JobHandlerMessage(TaskMessage):
 class WorkflowSchedulingMessage(TaskMessage):
     target = 'workflow_scheduling'
     _validate_params = ('workflow_invocation_id',)
-
-
-def decode(msg_str):
-    d = json.loads(msg_str)
-    cls = d.pop('__classname__')
-    return globals()[cls](**d)

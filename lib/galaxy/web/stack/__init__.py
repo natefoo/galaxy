@@ -18,13 +18,13 @@ except ImportError:
 import yaml
 from six import string_types
 
+from .transport import UWSGIFarmMessageTransport
+from galaxy.messaging.message import JobHandlerMessage, WorkflowSchedulingMessage
 from galaxy.util import unicodify
 from galaxy.util.bunch import Bunch
 from galaxy.util.facts import get_facts
 from galaxy.util.path import has_ext
 from galaxy.util.properties import nice_config_parser
-from .message import ApplicationStackMessage, ApplicationStackMessageDispatcher
-from .transport import ApplicationStackTransport, UWSGIFarmMessageTransport
 
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,6 @@ class UWSGILogFilter(logging.Filter):
 class ApplicationStack(object):
     name = None
     prohibited_middleware = frozenset()
-    transport_class = ApplicationStackTransport
     log_filter_class = ApplicationStackLogFilter
     log_format = '%(name)s %(levelname)s %(asctime)s %(message)s'
     # TODO: this belongs in the pool configuration
@@ -113,57 +112,11 @@ class ApplicationStack(object):
         app.config.server_name = self.server_name_template.format(**self.facts)
         log.debug('server_name set to: %s', app.config.server_name)
 
-    def register_message_handler(self, func, name=None):
-        pass
-
-    def deregister_message_handler(self, func=None, name=None):
-        pass
-
-    def send_message(self, dest, msg=None, target=None, params=None, **kwargs):
-        pass
-
     def shutdown(self):
         pass
 
 
-class MessageApplicationStack(ApplicationStack):
-    def __init__(self, app=None, config=None):
-        super(MessageApplicationStack, self).__init__(app=app, config=config)
-        self.dispatcher = ApplicationStackMessageDispatcher()
-        self.transport = self.transport_class(app, stack=self, dispatcher=self.dispatcher)
-
-    def start(self):
-        super(MessageApplicationStack, self).start()
-        if not self.running:
-            self.transport.start()
-            self.running = True
-
-    def register_message_handler(self, func, name=None):
-        self.dispatcher.register_func(func, name)
-        self.transport.start_if_needed()
-
-    def deregister_message_handler(self, func=None, name=None):
-        self.dispatcher.deregister_func(func, name)
-        self.transport.stop_if_unneeded()
-
-    def send_message(self, dest, msg=None, target=None, params=None, **kwargs):
-        assert msg is not None or target is not None, "Either 'msg' or 'target' parameters must be set"
-        if not msg:
-            msg = ApplicationStackMessage(
-                target=target,
-                params=params,
-                **kwargs
-            )
-        self.transport.send_message(msg.encode(), dest)
-
-    def shutdown(self):
-        if self.running:
-            log.info('Application stack interface shutting down')
-            self.transport.shutdown()
-            self.running = False
-
-
-class UWSGIApplicationStack(MessageApplicationStack):
+class UWSGIApplicationStack(ApplicationStack):
     """Interface to the uWSGI application stack. Supports running additional webless Galaxy workers as mules. Mules
     must be farmed to be communicable via uWSGI mule messaging, unfarmed mules are not supported.
 
@@ -174,7 +127,6 @@ class UWSGIApplicationStack(MessageApplicationStack):
         'wrap_in_static',
         'EvalException',
     ])
-    transport_class = UWSGIFarmMessageTransport
     log_filter_class = UWSGILogFilter
     log_format = '%(name)s %(levelname)s %(asctime)s [p:%(process)s,w:%(worker_id)s,m:%(mule_id)s] [%(threadName)s] %(message)s'
     server_name_template = '{server_name}.{pool_name}.{instance_id}'
@@ -283,6 +235,10 @@ class UWSGIApplicationStack(MessageApplicationStack):
         self._farms_dict = None
         self._mules_list = None
         super(UWSGIApplicationStack, self).__init__(app=app, config=config)
+        # FIXME: 1. probably would be better to do in init but broker needs stack, 2. we still don't want to use
+        # has_pool to make this decision do we?
+        if self.app and self.has_pool(self.pools.JOB_HANDLERS):
+            self.app.message_broker.register_transport(UWSGIFarmMessageTransport, (JobHandlerMessage, WorkflowSchedulingMessage))
 
     @property
     def _configured_mules(self):

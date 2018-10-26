@@ -8,7 +8,7 @@ from sqlalchemy.sql.expression import null
 
 from galaxy.jobs import handler, NoopQueue
 from galaxy.model import Job
-from galaxy.web.stack.message import JobHandlerMessage
+from galaxy.messaging.message import JobHandlerMessage
 
 log = logging.getLogger(__name__)
 
@@ -86,4 +86,4 @@ class MessageJobQueue(NoopQueue):
 
     def put(self, job_id, tool_id):
         msg = JobHandlerMessage(task='setup', job_id=job_id)
-        self.app.application_stack.send_message(self.app.application_stack.pools.JOB_HANDLERS, msg)
+        self.app.message_broker.send_message(self.app.application_stack.pools.JOB_HANDLERS, msg)

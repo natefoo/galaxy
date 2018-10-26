@@ -7,7 +7,7 @@ from galaxy import model
 from galaxy.util import plugin_config
 from galaxy.util.handlers import ConfiguresHandlers
 from galaxy.util.monitors import Monitors
-from galaxy.web.stack.message import WorkflowSchedulingMessage
+from galaxy.messaging.message import WorkflowSchedulingMessage
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class WorkflowSchedulingManager(ConfiguresHandlers):
                 self.__start_request_monitor()
             if self.__use_stack_messages:
                 WorkflowSchedulingMessage().bind_default_handler(self, '_handle_message')
-                self.app.application_stack.register_message_handler(
+                self.app.message_broker.register_message_handler(
                     self._handle_message,
                     name=WorkflowSchedulingMessage.target)
         else:

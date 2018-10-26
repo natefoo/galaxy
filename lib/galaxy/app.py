@@ -17,6 +17,7 @@ from galaxy.managers.folders import FolderManager
 from galaxy.managers.histories import HistoryManager
 from galaxy.managers.libraries import LibraryManager
 from galaxy.managers.tags import GalaxyTagManager
+from galaxy.messaging import MessageBroker
 from galaxy.openid.providers import OpenIDProviders
 from galaxy.queue_worker import GalaxyQueueWorker
 from galaxy.tools.cache import (
@@ -67,9 +68,13 @@ class UniverseApplication(config.ConfiguresGalaxyMixin):
         self.config.check()
         config.configure_logging(self.config)
         self.configure_fluent_log()
+        # TODO: where exactly should this init go
+        self.message_broker = MessageBroker(app=self, config=self.config)
         # A lot of postfork initialization depends on the server name, ensure it is set immediately after forking before other postfork functions
         self.application_stack = application_stack_instance(app=self)
         self.application_stack.register_postfork_function(self.application_stack.set_postfork_server_name, self)
+        # TODO: and this postfork
+        self.application_stack.register_postfork_function(self.message_broker.start)
         self.config.reload_sanitize_whitelist(explicit='sanitize_whitelist_file' in kwargs)
         self.amqp_internal_connection_obj = galaxy.queues.connection_from_config(self.config)
         # control_worker *can* be initialized with a queue, but here we don't

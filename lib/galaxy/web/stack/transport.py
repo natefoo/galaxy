@@ -5,6 +5,7 @@ from __future__ import absolute_import
 import logging
 import threading
 
+from galaxy.messaging.transport import MessagingTransport
 from galaxy.util import unicodify
 
 try:
@@ -16,55 +17,7 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
-class ApplicationStackTransport(object):
-    SHUTDOWN_MSG = '__SHUTDOWN__'
-
-    def __init__(self, app, stack, dispatcher=None):
-        """ Pre-fork initialization.
-        """
-        self.app = app
-        self.stack = stack
-        self.can_run = False
-        self.running = False
-        self.dispatcher = dispatcher
-        self.dispatcher_thread = None
-
-    def _dispatch_messages(self):
-        pass
-
-    def start_if_needed(self):
-        # Don't unnecessarily start a thread that we don't need.
-        if self.can_run and not self.running and not self.dispatcher_thread and self.dispatcher and self.dispatcher.handler_count:
-            self.running = True
-            self.dispatcher_thread = threading.Thread(name=self.__class__.__name__ + ".dispatcher_thread", target=self._dispatch_messages)
-            self.dispatcher_thread.start()
-            log.info('%s dispatcher started', self.__class__.__name__)
-
-    def stop_if_unneeded(self):
-        if self.can_run and self.running and self.dispatcher_thread and self.dispatcher and not self.dispatcher.handler_count:
-            self.running = False
-            self.dispatcher_thread.join()
-            self.dispatcher_thread = None
-            log.info('%s dispatcher stopped', self.__class__.__name__)
-
-    def start(self):
-        """ Post-fork initialization.
-        """
-        self.can_run = True
-        self.start_if_needed()
-
-    def send_message(self, msg, dest):
-        pass
-
-    def shutdown(self):
-        self.running = False
-        if self.dispatcher_thread:
-            log.info('Joining application stack transport dispatcher thread')
-            self.dispatcher_thread.join()
-            self.dispatcher_thread = None
-
-
-class UWSGIFarmMessageTransport(ApplicationStackTransport):
+class UWSGIFarmMessageTransport(MessagingTransport):
     """ Communication via uWSGI Mule Farm messages. Communication is unidirectional (workers -> mules).
     """
     # Define any static lock names here, additional locks will be appended for each configured farm's message handler
@@ -82,9 +35,12 @@ class UWSGIFarmMessageTransport(ApplicationStackTransport):
         #     uwsgi.set_option('locks', len(self.lock_map))
         #     log.debug('Created %s uWSGI locks' % len(self.lock_map))
 
-    def __init__(self, app, stack, dispatcher=None):
-        super(UWSGIFarmMessageTransport, self).__init__(app, stack, dispatcher=dispatcher)
-        self.__initialize_locks()
+    def __init__(self, app, dispatcher=None):
+        super(UWSGIFarmMessageTransport, self).__init__(app, dispatcher=dispatcher)
+        # FIXME: stack doesn't exist here, can we init locks later? maybe as a separate postfork before self.start()? or
+        # is it ok to call in start()?
+        #self.stack = self.app.application_stack
+        #self.__initialize_locks()
 
     def __lock(self, name_or_id):
         try:
@@ -132,7 +88,10 @@ class UWSGIFarmMessageTransport(ApplicationStackTransport):
 
         This is mainly done here for the future possibility that we'll be able to run mules post-fork without exec()ing. In a programmed mule it could be done at __init__ time.
         """
+        self.stack = self.app.application_stack
         if self.stack._is_mule:
+            # FIXME: ok here?
+            self.__initialize_locks()
             if not uwsgi.in_farm():
                 raise RuntimeError('Mule %s is not in a farm! Set `farm = <pool_name>:%s` in uWSGI configuration'
                                    % (uwsgi.mule_id(),
