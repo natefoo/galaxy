@@ -28,7 +28,9 @@ class JobManager(object):
             log.debug("Initializing job handler")
             self.job_handler = handler.JobHandler(app)
             self.job_stop_queue = self.job_handler.job_stop_queue
-        elif app.application_stack.has_pool(app.application_stack.pools.JOB_HANDLERS):
+        #elif app.application_stack.has_pool(app.application_stack.pools.JOB_HANDLERS):
+        # FIXME
+        elif True:
             log.debug("Initializing job handler messaging interface")
             self.job_handler = MessageJobHandler(app)
             self.job_stop_queue = NoopQueue()

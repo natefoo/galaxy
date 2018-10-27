@@ -7,13 +7,13 @@ import logging
 
 from .dispatch import MessageDispatcher
 from .message import Message
-from .transport import MessagingTransport
+from .transport.internal import InternalMessageTransport
 
 log = logging.getLogger(__name__)
 
 
 class MessageBroker(object):
-    default_messaging_transport = MessagingTransport
+    default_messaging_transport = InternalMessageTransport
 
     def __init__(self, app):
         self.app = app
@@ -44,11 +44,19 @@ class MessageBroker(object):
         for target in targets:
             if issubclass(target, Message):
                 target = target.target
-            self.transports_for_targets[target] = self.transports[transport_class.__name__]
+            if target not in self.transports_for_targets:
+                self.transports_for_targets[target] = [self.transports['_default_']]
+            self.transports_for_targets[target].insert(0, self.transports[transport_class.__name__])
             log.info("Registered '%s' messaging transport for '%s' messages", transport_class.__name__, target)
 
-    def get_transport(self, target):
-        return self.transports_for_targets.get(target, self.transports['_default_'])
+    def get_transports(self, target):
+        return self.transports_for_targets.get(target, [self.transports['_default_']])
+
+    def get_transport(self, target, dest):
+        for transport in self.get_transports(target):
+            if transport.has_dest(dest):
+                return transport
+        return None
 
     def register_message_handler(self, func, target=None):
         """Register a callback function responsible for handling a message.
@@ -62,8 +70,8 @@ class MessageBroker(object):
         :type   target: string
         """
         self.dispatcher.register_func(func, target)
-        transport = self.get_transport(target)
-        transport.start_if_needed()
+        for transport in self.get_transports(target):
+            transport.start_if_needed()
 
     def deregister_message_handler(self, func=None, target=None):
         """Deregister a callback function.
@@ -71,8 +79,8 @@ class MessageBroker(object):
         Stops the appropriate transport's dispatcher if it has no other callbacks.
         """
         self.dispatcher.deregister_func(func, target)
-        transport = self.get_transport(target)
-        transport.stop_if_unneeded()
+        for transport in self.get_transports(target):
+            transport.stop_if_unneeded()
 
     def send_message(self, dest, msg=None, target=None, params=None, **kwargs):
         assert msg is not None or target is not None, "Either 'msg' or 'target' parameters must be set"
@@ -82,7 +90,7 @@ class MessageBroker(object):
                 params=params,
                 **kwargs
             )
-        transport = self.get_transport(msg.target)
+        transport = self.get_transport(msg.target, dest)
         transport.send_message(msg.encode(), dest)
 
     def shutdown(self):

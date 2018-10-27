@@ -517,7 +517,8 @@ class DefaultToolAction(object):
         job.object_store_id = object_store_populator.object_store_id
         if job_params:
             job.params = dumps(job_params)
-        job.set_handler(tool.get_job_handler(job_params))
+        # FIXME
+        #job.set_handler(tool.get_job_handler(job_params))
         if completed_job:
             job.set_copied_from_job_id(completed_job.id)
         trans.sa_session.add(job)

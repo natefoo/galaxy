@@ -47,5 +47,8 @@ class MessagingTransport(object):
             self.dispatcher_thread = None
             log.info('%s dispatcher stopped', self.__class__.__name__)
 
+    def has_dest(self, dest):
+        return False
+
     def send_message(self, msg, dest):
         pass

@@ -103,6 +103,9 @@ class UWSGIFarmMessageTransport(MessagingTransport):
         if self.stack._is_mule:
             super(UWSGIFarmMessageTransport, self).shutdown()
 
+    def has_dest(self, dest):
+        return self.stack.has_pool(dest)
+
     def send_message(self, msg, dest):
         log.debug('Sending message to farm %s: %s', dest, msg)
         uwsgi.farm_msg(dest, msg)

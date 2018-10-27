@@ -240,11 +240,9 @@ class UWSGIApplicationStack(ApplicationStack):
         super(UWSGIApplicationStack, self).__init__(app=app, config=config)
 
     def register_stack_message_transports(self):
-        # can't do this in __init__ because stack is initialized before the message broker
-        # FIXME: 1. probably would be better to do in init but broker needs stack, 2. we still don't want to use
-        # has_pool to make this decision do we?
         if self.app and self.has_pool(self.pools.JOB_HANDLERS):
-            self.app.message_broker.register_transport(UWSGIFarmMessageTransport, (JobHandlerMessage, WorkflowSchedulingMessage))
+            # FIXME force to kombu
+            pass #self.app.message_broker.register_transport(UWSGIFarmMessageTransport, (JobHandlerMessage, WorkflowSchedulingMessage))
 
     @property
     def _configured_mules(self):
