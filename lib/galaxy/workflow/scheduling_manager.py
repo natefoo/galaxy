@@ -54,7 +54,7 @@ class WorkflowSchedulingManager(ConfiguresHandlers):
                 WorkflowSchedulingMessage().bind_default_handler(self, '_handle_message')
                 self.app.message_broker.register_message_handler(
                     self._handle_message,
-                    name=WorkflowSchedulingMessage.target)
+                    target=WorkflowSchedulingMessage.target)
         else:
             # Process should not schedule workflows but should check for any unassigned to handlers
             self.__startup_recovery()
@@ -76,7 +76,7 @@ class WorkflowSchedulingManager(ConfiguresHandlers):
                 log.info("(%s) Handler unassigned at startup, queueing workflow invocation via stack messaging for pool"
                          " [%s]", workflow_invocation.id, self.__handler_pool)
                 msg = WorkflowSchedulingMessage(task='setup', workflow_invocation_id=workflow_invocation.id)
-                self.app.application_stack.send_message(self.app.application_stack.pools.JOB_HANDLERS, msg)
+                self.app.message_broker.send_message(self.app.application_stack.pools.JOB_HANDLERS, msg)
 
     def _handle_setup_msg(self, workflow_invocation_id=None):
         sa_session = self.app.model.context
@@ -109,6 +109,7 @@ class WorkflowSchedulingManager(ConfiguresHandlers):
 
     def shutdown(self):
         exception = None
+        self.app.message_broker.deregister_message_handler(target=WorkflowSchedulingMessage.target)
         for workflow_scheduler in self.workflow_schedulers.values():
             try:
                 workflow_scheduler.shutdown()
@@ -145,7 +146,7 @@ class WorkflowSchedulingManager(ConfiguresHandlers):
             log.info("(%s) Queueing workflow invocation via stack messaging for pool [%s]",
                      workflow_invocation.id, self.__handler_pool)
             msg = WorkflowSchedulingMessage(task='setup', workflow_invocation_id=workflow_invocation.id)
-            self.app.application_stack.send_message(self.__handler_pool, msg)
+            self.app.message_broker.send_message(self.__handler_pool, msg)
 
         return workflow_invocation
 

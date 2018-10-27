@@ -18,8 +18,8 @@ except ImportError:
 import yaml
 from six import string_types
 
-from .transport import UWSGIFarmMessageTransport
 from galaxy.messaging.message import JobHandlerMessage, WorkflowSchedulingMessage
+from galaxy.messaging.transport.uwsgi import UWSGIFarmMessageTransport
 from galaxy.util import unicodify
 from galaxy.util.bunch import Bunch
 from galaxy.util.facts import get_facts
@@ -75,6 +75,9 @@ class ApplicationStack(object):
         self.app = app
         self.config = config or (app and app.config)
         self.running = False
+
+    def register_stack_message_transports(self):
+        pass
 
     def log_startup(self):
         log.info("Galaxy server instance '%s' is running" % self.app.config.server_name)
@@ -235,6 +238,9 @@ class UWSGIApplicationStack(ApplicationStack):
         self._farms_dict = None
         self._mules_list = None
         super(UWSGIApplicationStack, self).__init__(app=app, config=config)
+
+    def register_stack_message_transports(self):
+        # can't do this in __init__ because stack is initialized before the message broker
         # FIXME: 1. probably would be better to do in init but broker needs stack, 2. we still don't want to use
         # has_pool to make this decision do we?
         if self.app and self.has_pool(self.pools.JOB_HANDLERS):

@@ -15,48 +15,64 @@ log = logging.getLogger(__name__)
 class MessageBroker(object):
     default_messaging_transport = MessagingTransport
 
-    # TODO: probably shouldn't be kwargs anymore also who needs config? probably one of the stack factory functions
-    def __init__(self, app=None, config=None):
+    def __init__(self, app):
         self.app = app
-        self.config = config
-        self.running = False
         self.dispatcher = MessageDispatcher()
         self.transports = {}
-        self.register_default_transport()
+        self.transports_for_targets = {}
+        self.__register_default_transport()
 
-    def register_transport(self, transport_class, message_classes):
-        # FIXME: this should probably be targets, not message classes?
-        # TODO: you could register postfork transport start methods here instead of registering the broker's start
-        # method and starting them in there, does that make more sense?
-        for message_class in message_classes:
-            # TODO: could issubclass() here
-            self.transports[message_class.__name__] = transport_class(self.app, dispatcher=self.dispatcher)
-            log.info("Registered '%s' messaging transport for '%s' messages: %s", transport_class.__name__,
-                    message_class.__name__, transport_class)
+    def __register_default_transport(self):
+        transport = self.default_messaging_transport(self.app, dispatcher=self.dispatcher)
+        self.transports['_default_'] = transport
+        self.app.application_stack.register_postfork_function(transport.start)
+        log.info("Registered default messaging transport: %s", self.default_messaging_transport)
 
-    def register_default_transport(self):
-        self.transports['_default_'] = self.default_messaging_transport(self.app, dispatcher=self.dispatcher)
-        log.info("Registered default messaging transport: %s", MessagingTransport)
+    def register_transport(self, transport_class, targets):
+        """Register a transport class responsible for sending messages of a given type.
 
-    def start(self):
-        if not self.running:
-            for name, transport in self.transports.items():
-                # FIXME: why do we start here? we start if needed when handlers are added
-                log.info("Starting '%s' messaging transport: %s", name, transport)
-                transport.start()
-            self.running = True
+        :param  transport_class:    Transport class to use for sending messages of the given type.
+        :type   transport_class:    :class:`galaxy.messaging.transport.MessagingTransport` subclass
+        :param  targets:            List of targets (strings) or message classes for which the given transport class
+                                    should be used.
+        :type   targets:            Iterable of strings or :class:`galaxy.messaging.message.Message` subclasses
+        """
+        if transport_class.__name__ not in self.transports:
+            transport = transport_class(self.app, dispatcher=self.dispatcher)
+            self.transports[transport_class.__name__] = transport
+            self.app.application_stack.register_postfork_function(transport.start)
+        for target in targets:
+            if issubclass(target, Message):
+                target = target.target
+            self.transports_for_targets[target] = self.transports[transport_class.__name__]
+            log.info("Registered '%s' messaging transport for '%s' messages", transport_class.__name__, target)
 
-    def register_message_handler(self, func, name=None):
-        self.dispatcher.register_func(func, name)
-        # FIXME: you shouldn't start them all, just the transport for this message type
-        # FIXME: how many dispatcher threads does this make?
-        for name, transport in self.transports.items():
-            transport.start_if_needed()
+    def get_transport(self, target):
+        return self.transports_for_targets.get(target, self.transports['_default_'])
 
-    def deregister_message_handler(self, func=None, name=None):
-        self.dispatcher.deregister_func(func, name)
-        for name, transport in self.transports.items():
-            transport.stop_if_unneeded()
+    def register_message_handler(self, func, target=None):
+        """Register a callback function responsible for handling a message.
+
+        Starts the appropriate transport's dispatcher thread if it is not already running.
+
+        :param  func:   Callback function
+        :type   func:   function
+        :param  target: Message target for which this function should be called. If ``None`` then the function name is
+                        the target.
+        :type   target: string
+        """
+        self.dispatcher.register_func(func, target)
+        transport = self.get_transport(target)
+        transport.start_if_needed()
+
+    def deregister_message_handler(self, func=None, target=None):
+        """Deregister a callback function.
+
+        Stops the appropriate transport's dispatcher if it has no other callbacks.
+        """
+        self.dispatcher.deregister_func(func, target)
+        transport = self.get_transport(target)
+        transport.stop_if_unneeded()
 
     def send_message(self, dest, msg=None, target=None, params=None, **kwargs):
         assert msg is not None or target is not None, "Either 'msg' or 'target' parameters must be set"
@@ -66,12 +82,10 @@ class MessageBroker(object):
                 params=params,
                 **kwargs
             )
-        transport = self.transports.get(msg.__class__.__name__, self.transports['_default_'])
+        transport = self.get_transport(msg.target)
         transport.send_message(msg.encode(), dest)
 
     def shutdown(self):
-        if self.running:
-            for name, transport in self.transports.items():
-                log.info("Shutting down '%s' messaging transport: %s", name, transport)
-                transport.shutdown()
-            self.running = False
+        for name, transport in self.transports.items():
+            log.info("Shutting down '%s' messaging transport: %s", name, transport)
+            transport.shutdown()

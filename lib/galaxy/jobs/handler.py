@@ -98,9 +98,9 @@ class JobHandlerQueue(Monitors):
         self.__check_jobs_at_startup()
         # Start the queue
         self.monitor_thread.start()
-        # The stack code is initialized in the application
+        # Register a handler for messages intended for job handlers
         JobHandlerMessage().bind_default_handler(self, '_handle_message')
-        self.app.message_broker.register_message_handler(self._handle_message, name=JobHandlerMessage.target)
+        self.app.message_broker.register_message_handler(self._handle_message, target=JobHandlerMessage.target)
         log.info("job handler queue started")
 
     def job_wrapper(self, job, use_persisted_destination=False):
@@ -763,7 +763,7 @@ class JobHandlerQueue(Monitors):
             if not self.app.config.track_jobs_in_database:
                 self.queue.put(self.STOP_SIGNAL)
             # A message could still be received while shutting down, should be ok since they will be picked up on next startup.
-            self.app.message_broker.deregister_message_handler(name=JobHandlerMessage.target)
+            self.app.message_broker.deregister_message_handler(target=JobHandlerMessage.target)
             self.sleeper.wake()
             self.shutdown_monitor()
             log.info("job handler queue stopped")
