@@ -10,12 +10,12 @@ from kombu.mixins import ConsumerMixin
 from kombu.pools import producers
 
 import galaxy.queues
-from . import MessagingTransport
+from . import MessageTransport
 
 log = logging.getLogger(__name__)
 
 
-class KombuMessageTransport(MessagingTransport, ConsumerMixin):
+class KombuMessageTransport(MessageTransport, ConsumerMixin):
     """
     This is a flexible worker for galaxy's queues.  Each process, web or
     handler, will have one of these used for dispatching so called 'control'

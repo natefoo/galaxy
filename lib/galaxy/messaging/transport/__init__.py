@@ -6,7 +6,7 @@ import threading
 log = logging.getLogger(__name__)
 
 
-class MessagingTransport(object):
+class MessageTransport(object):
     SHUTDOWN_MSG = '__SHUTDOWN__'
 
     def __init__(self, app, dispatcher=None):

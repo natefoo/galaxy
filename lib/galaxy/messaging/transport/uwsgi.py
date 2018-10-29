@@ -9,14 +9,14 @@ try:
 except ImportError:
     uwsgi = None
 
-from . import MessagingTransport
+from . import MessageTransport
 from galaxy.util import unicodify
 
 
 log = logging.getLogger(__name__)
 
 
-class UWSGIFarmMessageTransport(MessagingTransport):
+class UWSGIFarmMessageTransport(MessageTransport):
     """ Communication via uWSGI Mule Farm messages. Communication is unidirectional (workers -> mules).
     """
     # Define any static lock names here, additional locks will be appended for each configured farm's message handler

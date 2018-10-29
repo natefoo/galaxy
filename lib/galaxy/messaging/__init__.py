@@ -32,7 +32,7 @@ class MessageBroker(object):
         """Register a transport class responsible for sending messages of a given type.
 
         :param  transport_class:    Transport class to use for sending messages of the given type.
-        :type   transport_class:    :class:`galaxy.messaging.transport.MessagingTransport` subclass
+        :type   transport_class:    :class:`galaxy.messaging.transport.MessageTransport` subclass
         :param  targets:            List of targets (strings) or message classes for which the given transport class
                                     should be used.
         :type   targets:            Iterable of strings or :class:`galaxy.messaging.message.Message` subclasses
