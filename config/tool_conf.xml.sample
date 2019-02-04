@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <toolbox monitor="true">
-  <section id="getext" name="Get Data">
+  <label id="file_meta_label" text="File and Meta Tools" />
+  <section id="get_data" name="Get Data">
     <tool file="data_source/upload.xml" />
     <tool file="data_source/ucsc_tablebrowser.xml" />
     <!-- <tool file="data_source/ucsc_tablebrowser_test.xml" /> -->
@@ -23,9 +24,19 @@
     <tool file="genomespace/genomespace_importer.xml" />
     <tool file="genomespace/genomespace_push.xml" />
   </section>
-  <section id="send" name="Send Data">
+  <section id="send_data" name="Send Data">
     <tool file="cloud/send.xml" />
     <tool file="genomespace/genomespace_exporter.xml" />
+  </section>
+  <section id="convert_formats" name="Convert Formats">
+    <tool file="filters/bed2gff.xml" />
+    <tool file="filters/gff2bed.xml" />
+    <tool file="maf/maf_to_bed.xml" />
+    <tool file="maf/maf_to_interval.xml" />
+    <tool file="maf/maf_to_fasta.xml" />
+    <tool file="filters/sff_extractor.xml" />
+    <tool file="filters/wig_to_bigwig.xml" />
+    <tool file="filters/bed_to_bigbed.xml" />
   </section>
   <section id="collection_operations" name="Collection Operations">
     <tool file="${model_tools_path}/unzip_collection.xml" />
@@ -42,10 +53,8 @@
     <tool file="${model_tools_path}/build_list.xml" />
     <tool file="${model_tools_path}/extract_dataset.xml" />
   </section>
-  <section id="liftOver" name="Lift-Over">
-    <tool file="extract/liftOver_wrapper.xml" />
-  </section>
-  <section id="textutil" name="Text Manipulation">
+  <label id="general_text_label" text="General Text Tools" />
+  <section id="text_manipulation" name="Text Manipulation">
     <tool file="filters/fixedValueColumn.xml" />
     <tool file="filters/catWrapper.xml" />
     <tool file="filters/cutWrapper.xml" />
@@ -63,17 +72,7 @@
     <tool file="filters/wc_gnu.xml" />
     <tool file="filters/secure_hash_message_digest.xml" />
   </section>
-  <section id="convert" name="Convert Formats">
-    <tool file="filters/bed2gff.xml" />
-    <tool file="filters/gff2bed.xml" />
-    <tool file="maf/maf_to_bed.xml" />
-    <tool file="maf/maf_to_interval.xml" />
-    <tool file="maf/maf_to_fasta.xml" />
-    <tool file="filters/sff_extractor.xml" />
-    <tool file="filters/wig_to_bigwig.xml" />
-    <tool file="filters/bed_to_bigbed.xml" />
-  </section>
-  <section id="filter" name="Filter and Sort">
+  <section id="filter_and_sort" name="Filter and Sort">
     <tool file="stats/filtering.xml" />
     <tool file="filters/sorter.xml" />
     <tool file="filters/grep.xml" />
@@ -83,12 +82,20 @@
     <tool file="filters/gff/gff_filter_by_feature_count.xml" />
     <tool file="filters/gff/gtf_filter_by_attribute_values_list.xml" />
   </section>
-  <section id="group" name="Join, Subtract and Group">
+  <section id="join_subtract_and_group" name="Join, Subtract and Group">
     <tool file="filters/joiner.xml" />
     <tool file="filters/compare.xml" />
     <tool file="stats/grouping.xml" />
   </section>
-  <section id="fetchAlignSeq" name="Fetch Alignments/Sequences">
+  <label id="common_genomics_tools" text="Common Genomics Tools" />
+  <section id="operate_on_genomic_intervals" name="Operate on Genomic Intervals" version="">
+    <tool file="filters/wiggle_to_simple.xml" />
+    <tool file="stats/aggregate_binned_scores_in_intervals.xml" />
+  </section>
+  <section id="extract_features" name="Extract Features">
+    <tool file="filters/ucsc_gene_bed_to_exon_bed.xml" />
+  </section>
+  <section id="fetch_sequences_alignments" name="Fetch Sequences/Alignments">
     <tool file="maf/interval2maf_pairwise.xml" />
     <tool file="maf/interval2maf.xml" />
     <tool file="maf/maf_split_by_species.xml" />
@@ -102,25 +109,13 @@
     <tool file="maf/maf_reverse_complement.xml" />
     <tool file="maf/maf_filter.xml" />
   </section>
-  <section id="bxops" name="Operate on Genomic Intervals" version="">
-    <tool file="filters/wiggle_to_simple.xml" />
-    <tool file="stats/aggregate_binned_scores_in_intervals.xml" />
-    <tool file="filters/ucsc_gene_bed_to_exon_bed.xml" />
-  </section>
-  <section id="stats" name="Statistics">
+  <label id="statistics_and_visualization" text="Statistics and Visualization" />
+  <section id="statistics" name="Statistics">
     <tool file="stats/gsummary.xml" />
     <tool file="filters/uniq.xml" />
   </section>
-  <section id="plots" name="Graph/Display Data">
+  <section id="graph_display_data" name="Graph/Display Data">
     <tool file="maf/vcf_to_maf_customtrack.xml" />
   </section>
-  <section id="hgv" name="Phenotype Association">
-    <tool file="evolution/codingSnps.xml" />
-    <tool file="evolution/add_scores.xml" />
-    <tool file="phenotype_association/sift.xml" />
-    <tool file="phenotype_association/linkToGProfile.xml" />
-    <tool file="phenotype_association/linkToDavid.xml" />
-    <tool file="phenotype_association/ldtools.xml" />
-    <tool file="phenotype_association/master2pg.xml" />
-  </section>
+  <label id="tool_shed_and_local_tools" text="Tool Shed and Local Tools" />
 </toolbox>
