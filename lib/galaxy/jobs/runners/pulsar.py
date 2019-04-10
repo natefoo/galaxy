@@ -4,6 +4,7 @@ More information on Pulsar can be found at https://pulsar.readthedocs.io/ .
 """
 from __future__ import absolute_import  # Need to import pulsar_client absolutely.
 
+import copy
 import errno
 import logging
 import os
@@ -62,6 +63,7 @@ NO_REMOTE_DATATYPES_CONFIG = "Pulsar client is configured to use remote datatype
 GENERIC_REMOTE_ERROR = "Failed to communicate with remote job server."
 FAILED_REMOTE_ERROR = "Remote job server indicated a problem running or monitoring this job."
 LOST_REMOTE_ERROR = "Remote job server could not determine this job's state."
+CANCELLED_REMOTE_ERROR = "Remote job server indicated that this job was cancelled by Galaxy."
 
 UPGRADE_PULSAR_ERROR = "Galaxy is misconfigured, please contact administrator. The target Pulsar server is unsupported, this version of Galaxy requires Pulsar version %s or newer."
 
@@ -178,7 +180,9 @@ class PulsarJobRunner(AsynchronousJobRunner):
 
     def __init__(self, app, nworkers, **kwds):
         """Start the job runner."""
-        super(PulsarJobRunner, self).__init__(app, nworkers, runner_param_specs=PULSAR_PARAM_SPECS, **kwds)
+        runner_param_specs = copy.deepcopy(PULSAR_PARAM_SPECS)
+        runner_param_specs.update(kwds.pop('runner_param_specs', {}))
+        super(PulsarJobRunner, self).__init__(app, nworkers, runner_param_specs=runner_param_specs, **kwds)
         self._init_worker_threads()
         galaxy_url = self.runner_params.galaxy_url
         if not galaxy_url:
@@ -237,32 +241,45 @@ class PulsarJobRunner(AsynchronousJobRunner):
         return JobDestination(runner="pulsar", params=url_to_destination_params(url))
 
     def check_watched_item(self, job_state):
+        log.debug("(%s) checking Pulsar status", job_state.job_id)
         try:
             client = self.get_client_from_state(job_state)
             status = client.get_status()
+            # status is None if using MQ, which is ok, state will be updated async
+            log.debug("(%s) Pulsar status: %s", job_state.job_id, status)
         except PulsarClientTransportError as exc:
             log.error("Communication error with Pulsar server on state check, will retry: %s", exc)
             return job_state
         except Exception:
             # An orphaned job was put into the queue at app startup, so remote server went down
             # either way we are done I guess.
+            log.exception("(%s) Caught exception checking job status:")
             self.mark_as_finished(job_state)
             return None
-        job_state = self._update_job_state_for_status(job_state, status)
-        return job_state
+        if status:
+            job_state = self._update_job_state_for_status(job_state, status)
+            log.debug("(%s) Galaxy job state: %s", job_state.job_id, job_state)
+            return job_state
 
     def _update_job_state_for_status(self, job_state, pulsar_status, full_status=None):
+        # TODO: locking so that a poll immediately after job completion, after galaxy has received the real message, but
+        # before processing the real message has updated the job state, does not update the terminal state twice
+        log.debug("(%s) Pulsar status is: %s", job_state.job_id, pulsar_status)
         if pulsar_status == "complete":
-            self.mark_as_finished(job_state)
+            if not job_state.job_wrapper.get_job().finished:
+                self.mark_as_finished(job_state)
             return None
-        if pulsar_status in ["failed", "lost"]:
+        if pulsar_status in ["failed", "cancelled", "lost"]:
             if pulsar_status == "failed":
                 message = FAILED_REMOTE_ERROR
+            elif pulsar_status == "cancelled":
+                message = CANCELLED_REMOTE_ERROR
             else:
                 message = LOST_REMOTE_ERROR
             if not job_state.job_wrapper.get_job().finished:
                 self.fail_job(job_state, message, full_status=full_status)
             return None
+        # FIXME: queued here in granular states branched and in pulsar
         if pulsar_status == "running" and not job_state.running:
             job_state.running = True
             job_state.job_wrapper.change_state(model.Job.states.RUNNING)
@@ -589,8 +606,8 @@ class PulsarJobRunner(AsynchronousJobRunner):
         job_wrapper.command_line = job.get_command_line()
         state = job.get_state()
         if state in [model.Job.states.RUNNING, model.Job.states.QUEUED]:
-            log.debug("(Pulsar/%s) is still in running state, adding to the Pulsar queue" % (job.id))
-            job_state.old_state = True
+            log.debug("(Pulsar/%s) is still in %s state, adding to the Pulsar queue", state, job.id)
+            job_state.old_state = state
             job_state.running = state == model.Job.states.RUNNING
             self.monitor_queue.put(job_state)
 
@@ -604,7 +621,6 @@ class PulsarJobRunner(AsynchronousJobRunner):
         # but not CLI submitted MQ updates...
         raw_job_id = job.get_job_runner_external_id() or job_wrapper.job_id
         job_state.job_id = str(raw_job_id)
-        job_state.runner_url = job_wrapper.get_job_runner_url()
         job_state.job_destination = job_wrapper.job_destination
         job_state.job_wrapper = job_wrapper
         return job_state
@@ -749,13 +765,23 @@ class PulsarMQJobRunner(PulsarJobRunner):
         private_token=PARAMETER_SPECIFICATION_IGNORED
     )
 
-    def _monitor(self):
-        # This is a message queue driven runner, don't monitor
-        # just setup required callback.
-        self._init_noop_monitor()
+    def __init__(self, app, nworkers, **kwargs):
+        # Increase the default monitor sleep since status updates are event-based, polling is only a backup
+        runner_param_specs = {
+            'monitor_sleep': {'default': 5},
+            'poll_jobs_older_than': {'default': None},
+        }
+        super(PulsarMQJobRunner, self).__init__(app, nworkers, runner_param_specs=runner_param_specs, **kwargs)
 
+    def _monitor(self):
         self.client_manager.ensure_has_status_update_callback(self.__async_update)
         self.client_manager.ensure_has_ack_consumers()
+
+        # This is a message queue driven runner, unless polling is enabled, don't monitor, just setup required callback.
+        if self.runner_params.params['poll_jobs_older_than']:
+            self._init_monitor_thread()
+        else:
+            self._init_noop_monitor()
 
     def __async_update(self, full_status):
         job_id = None
