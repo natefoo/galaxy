@@ -258,7 +258,8 @@ class PulsarJobRunner(AsynchronousJobRunner):
             return None
         if status:
             job_state = self._update_job_state_for_status(job_state, status)
-            log.debug("(%s) Galaxy job state: %s", job_state.job_id, job_state)
+            if job_state:
+                log.debug("(%s) Galaxy job state: %s", job_state.job_id, job_state)
             return job_state
 
     def _update_job_state_for_status(self, job_state, pulsar_status, full_status=None):
@@ -283,6 +284,7 @@ class PulsarJobRunner(AsynchronousJobRunner):
         if pulsar_status == "running" and not job_state.running:
             job_state.running = True
             job_state.job_wrapper.change_state(model.Job.states.RUNNING)
+            job_state.old_state = model.Job.states.RUNNING
         return job_state
 
     def queue_job(self, job_wrapper):
@@ -623,6 +625,8 @@ class PulsarJobRunner(AsynchronousJobRunner):
         job_state.job_id = str(raw_job_id)
         job_state.job_destination = job_wrapper.job_destination
         job_state.job_wrapper = job_wrapper
+        job_state.old_state = job.state
+        job_state.running = job.state == model.Job.states.RUNNING
         return job_state
 
     def __client_outputs(self, client, job_wrapper):
@@ -789,7 +793,13 @@ class PulsarMQJobRunner(PulsarJobRunner):
             job_id = full_status["job_id"]
             job, job_wrapper = self.app.job_manager.job_handler.job_queue.job_pair_for_id(job_id)
             job_state = self._job_state(job, job_wrapper)
-            self._update_job_state_for_status(job_state, full_status["status"], full_status=full_status)
+            old_state = job_state.old_state
+            _job_state = self._update_job_state_for_status(job_state, full_status["status"], full_status=full_status)
+            if (self.runner_params.params['poll_jobs_older_than'] and _job_state is not None
+                    and old_state == _job_state.old_state):
+                # Received an update, no state change (or the state is terminal) so reset update_time
+                job_wrapper.touch(job)
+
         except Exception:
             log.exception("Failed to update Pulsar job status for job_id %s", job_id)
             raise
