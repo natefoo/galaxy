@@ -130,6 +130,7 @@ class BaseAppConfiguration(object):
             except Exception:
                 # Not an INI file
                 pass
+        # FIXME: this seems wrong? and then done again below
         self.config_dir = config_kwargs.get('config_dir', os.path.dirname(self.config_file or os.getcwd()))
         self.data_dir = config_kwargs.get('data_dir', None)
         # mutable_config_dir is intentionally not configurable. You can
@@ -153,47 +154,58 @@ class BaseAppConfiguration(object):
         log.debug("Data directory is %s", self.data_dir)
         log.debug("Mutable config directory is %s", self.mutable_config_dir)
 
-    def _in_mutable_config_dir(self, path):
+    def _strip_old_relative_dir(self, path, var, strip_dir, new_dir):
+        ignore = strip_dir + os.sep
+        if path.startswith(ignore):
+            log.warning(
+                "Paths for the '%s' option are now relative to '%s', remove the leading '%s' to suppress this "
+                "warning: %s", var, new_dir, ignore, path
+            )
+            path = path[len(ignore):]
+        return path
+
+    def _in_mutable_config_dir(self, path, var=None):
+        path = self._strip_old_relative_dir(path, var, 'config', self.mutable_config_dir)
         return os.path.join(self.mutable_config_dir, path)
 
-    def _in_config_dir(self, path):
+    def _in_config_dir(self, path, var=None):
+        # var is only needed for the warning message, and we should only be generating those for user-provided values,
+        # default paths starting with config/ are bugs that should be corrected
+        path = self._strip_old_relative_dir(path, var, 'config', self.config_dir)
         return os.path.join(self.config_dir, path)
 
     def _in_sample_dir(self, path):
-        return os.path.join(self.sample_config_dir, path)
+        # make absolute because this will later be run through _in_config_dir()
+        return os.path.abspath(os.path.join(self.sample_config_dir, path))
 
-    def _parse_config_file_options(self, defaults, listify_defaults, config_kwargs):
-        for var, values in defaults.items():
+    def _parse_config_file_options(self, defaults, config_kwargs):
+
+        # we no longer have nested list defaults, so listify is only used to listify user values
+        def _canonicalize_user_value(var):
+            value = config_kwargs.get(var)
+            if do_listify:
+                return [canon(v, var=var) for v in listify(value)]
+            else:
+                return canon(value, var=var)
+
+        def _get_default(values):
+            for value in values:
+                path = canon(value)
+                if os.path.exists(path):
+                    return path
+            else:
+               return canon(values[-1])
+
+        for var, value_data in defaults.items():
+            canon = value_data['canonicalize_function']
+            do_listify = value_data['listify']
             if config_kwargs.get(var, None) is not None:
-                path = config_kwargs.get(var)
+                value = _canonicalize_user_value(var)
                 setattr(self, var + '_set', True)
             else:
-                for value in values:
-                    if os.path.exists(resolve_path(value, self.root)):
-                        path = value
-                        break
-                else:
-                    path = values[-1]
+                value = _get_default(value_data['values'])
                 setattr(self, var + '_set', False)
-            setattr(self, var, resolve_path(path, self.root))
-
-        for var, values in listify_defaults.items():
-            paths = []
-            if config_kwargs.get(var, None) is not None:
-                paths = listify(config_kwargs.get(var))
-                setattr(self, var + '_set', True)
-            else:
-                for value in values:
-                    for path in listify(value):
-                        if not os.path.exists(resolve_path(path, self.root)):
-                            break
-                    else:
-                        paths = listify(value)
-                        break
-                else:
-                    paths = listify(values[-1])
-                setattr(self, var + '_set', False)
-            setattr(self, var, [resolve_path(x, self.root) for x in paths])
+            setattr(self, var, value)
 
 
 class GalaxyAppConfiguration(BaseAppConfiguration):
@@ -825,46 +837,54 @@ class GalaxyAppConfiguration(BaseAppConfiguration):
         else:
             return None
 
+    def _config_file_default_dict(self, values, canonicalize_function=None, listify=False):
+        return {
+            'values': values,
+            'canonicalize_function': canonicalize_function or self._in_config_dir,
+            'listify': listify
+        }
+
     def parse_config_file_options(self, kwargs):
         """
         Backwards compatibility for config files moved to the config/ dir.
         """
-        defaults = dict(
-            auth_config_file=[self._in_config_dir('auth_conf.xml')],
-            build_sites_config_file=[self._in_config_dir('build_sites.yml')],
-            containers_config_file=[self._in_config_dir('containers_conf.yml')],
-            data_manager_config_file=[self._in_config_dir('data_manager_conf.xml')],
-            datatypes_config_file=[self._in_config_dir('datatypes_conf.xml'), self._in_sample_dir('datatypes_conf.xml.sample')],
-            dependency_resolvers_config_file=[self._in_config_dir('dependency_resolvers_conf.xml')],
-            error_report_file=[self._in_config_dir('error_report.yml')],
-            job_config_file=[self._in_config_dir('job_conf.xml')],
-            job_metrics_config_file=[self._in_config_dir('job_metrics_conf.xml'), self._in_sample_dir('job_metrics_conf.xml.sample')],
-            job_resource_params_file=[self._in_config_dir('job_resource_params_conf.xml')],
-            local_conda_mapping_file=[self._in_config_dir('local_conda_mapping.yml')],
-            migrated_tools_config=[self._in_config_dir('migrated_tools_conf.xml')],
-            modules_mapping_files=[self._in_config_dir('environment_modules_mapping.yml')],
-            object_store_config_file=[self._in_config_dir('object_store_conf.xml')],
-            oidc_backends_config_file=[self._in_config_dir('oidc_backends_config.yml')],
-            oidc_config_file=[self._in_config_dir('oidc_config.yml')],
-            shed_data_manager_config_file=[self._in_mutable_config_dir('shed_data_manager_conf.xml')],
-            shed_tool_config_file=[self._in_mutable_config_dir('shed_tool_conf.xml')],
-            shed_tool_data_table_config=[self._in_mutable_config_dir('shed_tool_data_table_conf.xml')],
-            tool_destinations_config_file=[self._in_config_dir('tool_destinations.yml')],
-            tool_sheds_config_file=[self._in_config_dir('tool_sheds_conf.xml')],
-            user_preferences_extra_conf_path=[self._in_config_dir('user_preferences_extra_conf.yml')],
-            workflow_resource_params_file=[self._in_config_dir('workflow_resource_params_conf.xml')],
-            workflow_schedulers_config_file=[self._in_config_dir('config/workflow_schedulers_conf.xml')],
-        )
-        listify_defaults = {
-            'tool_data_table_config_path': [
-                self._in_config_dir('tool_data_table_conf.xml'),
-                self._in_sample_dir('tool_data_table_conf.xml.sample')],
-            'tool_config_file': [
-                self._in_config_dir('tool_conf.xml'),
-                self._in_sample_dir('tool_conf.xml.sample')]
+        default = self._config_file_default_dict
+        defaults = {
+            'auth_config_file': default(['auth_conf.xml']),
+            'build_sites_config_file': default(['build_sites.yml']),
+            'containers_config_file': default(['containers_conf.yml']),
+            'data_manager_config_file': default(['data_manager_conf.xml']),
+            'datatypes_config_file': default(
+                ['datatypes_conf.xml', self._in_sample_dir('datatypes_conf.xml.sample')]),
+            'dependency_resolvers_config_file': default(['dependency_resolvers_conf.xml']),
+            'error_report_file': default(['error_report.yml']),
+            'job_config_file': default(['job_conf.xml']),
+            'job_metrics_config_file': default(['job_metrics_conf.xml']),
+            'job_resource_params_file': default(['job_resource_params_conf.xml']),
+            'local_conda_mapping_file': default(['local_conda_mapping.yml']),
+            'migrated_tools_config': default(['migrated_tools_conf.xml']),
+            'modules_mapping_files': default(['environment_modules_mapping.yml']),
+            'object_store_config_file': default(['object_store_conf.xml']),
+            'oidc_backends_config_file': default(['oidc_backends_config.yml']),
+            'oidc_config_file': default(['oidc_config.yml']),
+            'shed_data_manager_config_file': default(
+                ['shed_data_manager_conf.xml'], canonicalize_function=self._in_mutable_config_dir),
+            'shed_tool_config_file': default(
+                ['shed_tool_conf.xml'], canonicalize_function=self._in_mutable_config_dir),
+            'shed_tool_data_table_config': default(
+                ['shed_tool_data_table_conf.xml'], canonicalize_function=self._in_mutable_config_dir),
+            'tool_config_file': default(
+                ['tool_conf.xml', self._in_sample_dir('tool_conf.xml.sample')], listify=True),
+            'tool_data_table_config_path': default(
+                ['tool_data_table_conf.xml', self._in_sample_dir('tool_data_table_conf.xml.sample')], listify=True),
+            'tool_destinations_config_file': default(['tool_destinations.yml']),
+            'tool_sheds_config_file': default(['tool_sheds_conf.xml']),
+            'user_preferences_extra_conf_path': default(['user_preferences_extra_conf.yml']),
+            'workflow_resource_params_file': default(['workflow_resource_params_conf.xml']),
+            'workflow_schedulers_config_file': default(['config/workflow_schedulers_conf.xml']),
         }
 
-        self._parse_config_file_options(defaults, listify_defaults, kwargs)
+        self._parse_config_file_options(defaults, kwargs)
 
         # Backwards compatibility for names used in too many places to fix
         self.datatypes_config = self.datatypes_config_file

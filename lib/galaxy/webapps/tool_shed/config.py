@@ -174,13 +174,14 @@ class ToolShedAppConfiguration(BaseAppConfiguration):
             return None
 
     def parse_config_file_options(self, kwargs):
-        defaults = dict(
-            auth_config_file=[self._in_config_dir('config/auth_conf.xml')],
-            datatypes_config_file=[self._in_config_dir('datatypes_conf.xml'), self._in_sample_dir('datatypes_conf.xml.sample')],
-            shed_tool_data_table_config=[self._in_mutable_config_dir('shed_tool_data_table_conf.xml')],
+        default = self._config_file_default_dict
+        defaults = {
+            'auth_config_file': default(['config/auth_conf.xml']),
+            'datatypes_config_file': default(['datatypes_conf.xml', self._in_sample_dir('datatypes_conf.xml.sample')]),
+            'shed_tool_data_table_config': default(['shed_tool_data_table_conf.xml'], canonicalize_function=self._in_mutable_config_dir),
         )
 
-        self._parse_config_file_options(defaults, dict(), kwargs)
+        self._parse_config_file_options(defaults, kwargs)
 
         # Backwards compatibility for names used in too many places to fix
         self.datatypes_config = self.datatypes_config_file
