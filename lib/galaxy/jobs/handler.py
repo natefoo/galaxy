@@ -297,7 +297,8 @@ class JobHandlerQueue(Monitors):
         if self.job_grabber is not None:
             self.job_grabber.grab_unhandled_items()
         self.__handle_waiting_jobs()
-        log.trace(monitor_step_timer.to_str())
+        tags = {'server_name': self.app.config.server_name},
+        log.trace(monitor_step_timer.to_str(tags=tags))
 
     def __handle_waiting_jobs(self):
         """
