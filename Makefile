@@ -181,17 +181,22 @@ serve-selenium-notebooks: ## Serve testing notebooks for Jupyter
 
 # Release Targets
 release-create-rc: release-ensure-upstream ## Create a release-candidate branch
+	git diff --quiet
 	git checkout dev
 	git pull --ff-only $(RELEASE_UPSTREAM) dev
 	git push $(MY_UPSTREAM) dev
 	git checkout -b release_$(RELEASE_CURR)
 	git push $(MY_UPSTREAM) release_$(RELEASE_CURR)
-	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
 	git checkout -b version-$(RELEASE_CURR)
-	sed -i.bak -e "s/^VERSION_MAJOR = .*/VERSION_MAJOR = \"$(RELEASE_CURR)\"/" lib/galaxy/version.py
-	sed -i.bak -e "s/^VERSION_MINOR = .*/VERSION_MINOR = \"rc1\"/" lib/galaxy/version.py
-	rm -f lib/galaxy/version.py.bak
-	git add lib/galaxy/version.py
+	sed -i.bak -e 's/^VERSION_MAJOR = .*/VERSION_MAJOR = "$(RELEASE_CURR)"/' lib/galaxy/version.py
+	sed -i.bak -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "rc1"/' lib/galaxy/version.py
+	sed -i.bak -e 's/^RELEASE_CURR:=.*/RELEASE_CURR:=$(RELEASE_CURR)/' Makefile
+	sed -i.bak -e 's/^RELEASE_NEXT:=.*/RELEASE_NEXT:=$(RELEASE_NEXT)/' Makefile
+	rm -f lib/galaxy/version.py.bak Makefile.bak
+	git add lib/galaxy/version.py Makefile
+	DEV_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
+	git add -- packages
+	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
 	git commit -m "Update version to $(RELEASE_CURR).rc1"
 	git checkout dev
 
@@ -199,6 +204,8 @@ release-create-rc: release-ensure-upstream ## Create a release-candidate branch
 	sed -i.bak -e "s/^VERSION_MAJOR = .*/VERSION_MAJOR = \"$(RELEASE_NEXT)\"/" lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
+	DEV_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
+	git add -- packages
 	git commit -m "Update version to $(RELEASE_NEXT).dev"
 
 	-git merge version-$(RELEASE_CURR)
@@ -212,7 +219,33 @@ release-create-rc: release-ensure-upstream ## Create a release-candidate branch
 	@echo "Open a PR from version-$(RELEASE_CURR) of your fork to release_$(RELEASE_CURR)"
 	@echo "Open a PR from version-$(RELEASE_NEXT).dev of your fork to dev"
 
+release-create-rc-point: release-ensure-upstream ## Create a release-candidate version
+	git diff --quiet
+	git checkout release_$(RELEASE_CURR)
+	git pull --ff-only $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
+	#git push $(MY_UPSTREAM) release_$(RELEASE_CURR)
+	git checkout dev
+	git pull --ff-only $(RELEASE_UPSTREAM) dev
+	# Test run of merging. If there are conflicts, it will fail here.
+	git merge release_$(RELEASE_CURR)
+	git checkout release_$(RELEASE_CURR)
+	sed -i.bak -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "$(RELEASE_CURR_MINOR_NEXT)"/' lib/galaxy/version.py
+	rm -f lib/galaxy/version.py.bak
+	git add lib/galaxy/version.py
+	DEV_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
+	git add -- packages
+	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
+
+	git checkout dev
+	-git merge release_$(RELEASE_CURR)
+	git checkout --ours lib/galaxy/version.py
+	git add lib/galaxy/version.py
+	git commit -m "Merge branch 'release_$(RELEASE_CURR)' into dev"
+	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR):release_$(RELEASE_CURR)
+	git push $(RELEASE_UPSTREAM) dev:dev
+
 release-create: release-ensure-upstream ## Create a release branch
+	git diff --quiet
 	git checkout master
 	git pull --ff-only $(RELEASE_UPSTREAM) master
 	git push $(MY_UPSTREAM) master
@@ -228,6 +261,8 @@ release-create: release-ensure-upstream ## Create a release branch
 	sed -i.bak -e "s/^VERSION_MINOR = .*/VERSION_MINOR = None/" lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
+	./packages/build_scripts/make_all.sh update-version
+	git add -- packages
 	git commit -m "Update version to $(RELEASE_CURR)"
 	git tag -m "Tag version $(RELEASE_CURR)" v$(RELEASE_CURR)
 
@@ -244,6 +279,8 @@ release-create: release-ensure-upstream ## Create a release branch
 	git push $(RELEASE_UPSTREAM) --tags
 
 release-create-point: ## Create a point release
+	git diff --quiet
+	git checkout master
 	git pull --ff-only $(RELEASE_UPSTREAM) master
 	git push $(MY_UPSTREAM) master
 	git checkout release_$(RELEASE_CURR)
@@ -257,6 +294,8 @@ release-create-point: ## Create a point release
 	sed -i.bak -e "s/^VERSION_MINOR = .*/VERSION_MINOR = \"$(RELEASE_CURR_MINOR_NEXT)\"/" lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
+	./packages/build_scripts/make_all.sh update-version
+	git add -- packages
 	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
 	git tag -m "Tag version $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)" v$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)
 	git checkout $(RELEASE_NEXT_BRANCH)
@@ -266,10 +305,10 @@ release-create-point: ## Create a point release
 	git commit -m "Merge branch 'release_$(RELEASE_CURR)' into $(RELEASE_NEXT_BRANCH)"
 	git checkout master
 	git merge release_$(RELEASE_CURR)
-	#git push origin release_$(RELEASE_CURR):release_$(RELEASE_CURR)
-	#git push origin $(RELEASE_NEXT_BRANCH):release_$(RELEASE_NEXT_BRANCH)
-	#git push origin master:master
-	#git push origin --tags
+	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR):release_$(RELEASE_CURR)
+	git push $(RELEASE_UPSTREAM) dev:dev
+	git push $(RELEASE_UPSTREAM) master:master
+	git push $(RELEASE_UPSTREAM) --tags
 	git checkout release_$(RELEASE_CURR)
 
 .PHONY: help

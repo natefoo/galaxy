@@ -56,6 +56,18 @@ else:
     # In tox, it will cover them anyway.
     requirements = []
 
+DEV_RELEASE = os.environ.get("DEV_RELEASE", None) == "1"
+if not DEV_RELEASE:
+    _requirements = []
+    version_split = list(version.split('.'))
+    version_split[1] = str(int(version_split[1]) + 1)
+    next_version = '.'.join(version_split)
+    for requirement in requirements:
+        if requirement.startswith('galaxy-'):
+            requirement = f'{requirement}>={version},<{next_version}'
+        _requirements.append(requirement)
+    requirements = _requirements
+
 
 test_requirements = open("test-requirements.txt").read().split("\n")
 

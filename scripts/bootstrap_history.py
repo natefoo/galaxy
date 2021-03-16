@@ -315,6 +315,7 @@ GROUPPED_TAGS = OrderedDict([
 
 
 def print_next_minor_version():
+    prefix = ''
     minor_version_str = None
     with open(GALAXY_VERSION_FILE) as f:
         for line in f:
@@ -325,8 +326,11 @@ def print_next_minor_version():
     try:
         minor_version = int(minor_version_str)
     except (TypeError, ValueError):
-        minor_version = 0
-    print(minor_version + 1)
+        if minor_version.startswith('rc'):
+            prefix, minor_version = (minor_version[:2], int(minor_version[2:]))
+        else:
+            minor_version = 0
+    print(f'{prefix}{minor_version + 1}')
 
 
 def release_issue(argv):
