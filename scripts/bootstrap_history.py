@@ -327,7 +327,7 @@ def print_next_minor_version():
         minor_version = int(minor_version_str)
     except (TypeError, ValueError):
         if minor_version_str.startswith('rc'):
-            prefix, minor_version = (minor_version[:2], int(minor_version[2:]))
+            prefix, minor_version = (minor_version_str[:2], int(minor_version_str[2:]))
         else:
             minor_version = 0
     print(f'{prefix}{minor_version + 1}')
