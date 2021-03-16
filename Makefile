@@ -209,8 +209,8 @@ release-create-rc: release-ensure-upstream ## Create a release-candidate branch
 	git commit -m "Update version to $(RELEASE_NEXT).dev"
 
 	-git merge version-$(RELEASE_CURR)
-	git checkout --ours lib/galaxy/version.py packages/*/galaxy/project_*.py
-	git add lib/galaxy/version.py
+	git checkout --ours -- lib/galaxy/version.py packages/*/galaxy/project_*.py
+	git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
 	git commit -m "Merge branch 'version-$(RELEASE_CURR)' into version-$(RELEASE_NEXT).dev"
 	git push $(MY_UPSTREAM) version-$(RELEASE_CURR):version-$(RELEASE_CURR)
 	git push $(MY_UPSTREAM) version-$(RELEASE_NEXT).dev:version-$(RELEASE_NEXT).dev
@@ -238,8 +238,8 @@ release-create-rc-point: release-ensure-upstream ## Create a release-candidate v
 
 	git checkout dev
 	-git merge release_$(RELEASE_CURR)
-	git checkout --ours lib/galaxy/version.py packages/*/galaxy/project_*.py
-	git add lib/galaxy/version.py
+	git checkout --ours -- lib/galaxy/version.py packages/*/galaxy/project_*.py
+	git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
 	git commit -m "Merge branch 'release_$(RELEASE_CURR)' into dev"
 	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR):release_$(RELEASE_CURR)
 	git push $(RELEASE_UPSTREAM) dev:dev
@@ -268,8 +268,8 @@ release-create: release-ensure-upstream ## Create a release branch
 
 	git checkout dev
 	-git merge release_$(RELEASE_CURR)
-	git checkout --ours lib/galaxy/version.py packages/*/galaxy/project_*.py
-	git add lib/galaxy/version.py
+	git checkout --ours -- lib/galaxy/version.py packages/*/galaxy/project_*.py
+	git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
 	git commit -m "Merge branch 'release_$(RELEASE_CURR)' into dev"
 	git checkout master
 	git merge release_$(RELEASE_CURR)
@@ -300,8 +300,8 @@ release-create-point: ## Create a point release
 	git tag -m "Tag version $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)" v$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)
 	git checkout $(RELEASE_NEXT_BRANCH)
 	-git merge release_$(RELEASE_CURR)
-	git checkout --ours lib/galaxy/version.py packages/*/galaxy/project_*.py
-	git add lib/galaxy/version.py
+	git checkout --ours -- lib/galaxy/version.py packages/*/galaxy/project_*.py
+	git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
 	git commit -m "Merge branch 'release_$(RELEASE_CURR)' into $(RELEASE_NEXT_BRANCH)"
 	git checkout master
 	git merge release_$(RELEASE_CURR)
