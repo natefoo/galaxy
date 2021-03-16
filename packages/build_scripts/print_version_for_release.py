@@ -31,6 +31,10 @@ def read_from_galaxy():
         elif version_minor == 'dev':
             version = f'{version_major}.0.dev0'
         elif version_minor:
+            try:
+                version_minor = int(version_minor)
+            except (TypeError, ValueError):
+                version_minor = f'0.{version_minor}'
             version = f'{version_major}.{version_minor}'
         else:
             version = version_major
