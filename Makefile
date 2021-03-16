@@ -5,6 +5,9 @@ IN_VENV=if [ -f "$(VENV)/bin/activate" ]; then . "$(VENV)/bin/activate"; fi;
 RELEASE_CURR:=16.01
 RELEASE_CURR_MINOR_NEXT:=$(shell $(IN_VENV) python scripts/bootstrap_history.py --print-next-minor-version)
 RELEASE_NEXT:=16.04
+RELEASE_LOCAL_TAG?=local
+RELEASE_LOCAL_COMMIT?=$(shell git rev-parse --short HEAD)
+RELEASE_LOCAL_VERSION?=$(RELEASE_LOCAL_TAG)$(shell date -u +%Y%m%dT%H%M%SZ).$(RELEASE_LOCAL_COMMIT)
 # TODO: This needs to be updated with create_release_rc
 #RELEASE_NEXT_BRANCH:=release_$(RELEASE_NEXT)
 RELEASE_NEXT_BRANCH:=dev
@@ -261,7 +264,7 @@ release-create: release-ensure-upstream release-ensure-packaging ## Create a rel
 	# Test run of merging. If there are conflicts, it will fail here.
 	git merge release_$(RELEASE_CURR)
 	git checkout release_$(RELEASE_CURR)
-	sed -i.bak -e "s/^VERSION_MINOR = .*/VERSION_MINOR = None/" lib/galaxy/version.py
+	sed -i.bak -e 's/^VERSION_MINOR = .*/VERSION_MINOR = None/' lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
 	$(IN_VENV) GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
@@ -294,7 +297,7 @@ release-create-point: release-ensure-upstream release-ensure-packaging ## Create
 	#git push $(MY_UPSTREAM) $(RELEASE_NEXT_BRANCH)
 	git merge release_$(RELEASE_CURR)
 	git checkout release_$(RELEASE_CURR)
-	sed -i.bak -e "s/^VERSION_MINOR = .*/VERSION_MINOR = \"$(RELEASE_CURR_MINOR_NEXT)\"/" lib/galaxy/version.py
+	sed -i.bak -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "$(RELEASE_CURR_MINOR_NEXT)"/' lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
 	$(IN_VENV) GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
@@ -313,6 +316,16 @@ release-create-point: release-ensure-upstream release-ensure-packaging ## Create
 	git push $(RELEASE_UPSTREAM) master:master
 	git push $(RELEASE_UPSTREAM) --tags
 	git checkout release_$(RELEASE_CURR)
+
+release-create-local: release-ensure-packaging ## Create a local release
+	sed -E -i.bak -e "s/^(VERSION_MINOR = ['\"])([^+]*)[^'\"\]*(['\"])$$/\1\2+$(RELEASE_LOCAL_VERSION)\3/" lib/galaxy/version.py
+	sed -E -i.bak -e "s/^(VERSION_MINOR = )None$$/\1\"0+$(RELEASE_LOCAL_VERSION)\"/" lib/galaxy/version.py
+	rm -f lib/galaxy/version.py.bak
+	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
+	#git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
+	$(IN_VENV) LOCAL_RELEASE=1 ./packages/build_scripts/make_all.sh dist
+	#git commit -m "Update version to $(RELEASE_CURR)"
+	#git tag -m "Tag version $(RELEASE_CURR)" v$(RELEASE_CURR)
 
 .PHONY: help
 

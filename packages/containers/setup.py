@@ -54,7 +54,8 @@ else:
     requirements = []
 
 DEV_RELEASE = os.environ.get("DEV_RELEASE", None) == "1"
-if not DEV_RELEASE:
+LOCAL_RELEASE = os.environ.get("LOCAL_RELEASE", None) == "1"
+if DEV_RELEASE:
     _requirements = []
     version_split = list(version.split('.'))
     version_split[1] = str(int(version_split[1]) + 1)
@@ -62,6 +63,13 @@ if not DEV_RELEASE:
     for requirement in requirements:
         if requirement.startswith('galaxy-'):
             requirement = f'{requirement}>={version},<{next_version}'
+        _requirements.append(requirement)
+    requirements = _requirements
+elif LOCAL_RELEASE:
+    _requirements = []
+    for requirement in requirements:
+        if requirement.startswith('galaxy-'):
+            requirement = f'{requirement}=={version}'
         _requirements.append(requirement)
     requirements = _requirements
 
