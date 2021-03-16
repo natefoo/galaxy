@@ -108,6 +108,9 @@ else
 	@echo "Remote $(RELEASE_UPSTREAM) already exists."
 endif
 
+release-ensure-packaging: ## Ensure venv exists with packaging module
+	$(IN_VENV) pip show packaging
+
 release-merge-stable-to-next: release-ensure-upstream ## Merge last release into dev
 	git fetch $(RELEASE_UPSTREAM) && git checkout dev && git merge --ff-only $(RELEASE_UPSTREAM)/dev && git merge $(RELEASE_UPSTREAM)/$(RELEASE_PREVIOUS)
 
@@ -180,7 +183,7 @@ serve-selenium-notebooks: ## Serve testing notebooks for Jupyter
 	cd lib && export PYTHONPATH=`pwd`; jupyter notebook --notebook-dir=galaxy_test/selenium/jupyter
 
 # Release Targets
-release-create-rc: release-ensure-upstream ## Create a release-candidate branch
+release-create-rc: release-ensure-upstream release-ensure-packaging ## Create a release-candidate branch
 	git diff --quiet
 	git checkout dev
 	git pull --ff-only $(RELEASE_UPSTREAM) dev
@@ -194,7 +197,7 @@ release-create-rc: release-ensure-upstream ## Create a release-candidate branch
 	sed -i.bak -e 's/^RELEASE_NEXT:=.*/RELEASE_NEXT:=$(RELEASE_NEXT)/' Makefile
 	rm -f lib/galaxy/version.py.bak Makefile.bak
 	git add lib/galaxy/version.py Makefile
-	DEV_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
+	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	git add -- packages
 	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
 	git commit -m "Update version to $(RELEASE_CURR).rc1"
@@ -204,7 +207,7 @@ release-create-rc: release-ensure-upstream ## Create a release-candidate branch
 	sed -i.bak -e "s/^VERSION_MAJOR = .*/VERSION_MAJOR = \"$(RELEASE_NEXT)\"/" lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
-	DEV_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
+	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	git add -- packages
 	git commit -m "Update version to $(RELEASE_NEXT).dev"
 
@@ -219,7 +222,7 @@ release-create-rc: release-ensure-upstream ## Create a release-candidate branch
 	@echo "Open a PR from version-$(RELEASE_CURR) of your fork to release_$(RELEASE_CURR)"
 	@echo "Open a PR from version-$(RELEASE_NEXT).dev of your fork to dev"
 
-release-create-rc-point: release-ensure-upstream ## Create a release-candidate version
+release-create-rc-point: release-ensure-upstream release-ensure-packaging ## Create a release-candidate version
 	git diff --quiet
 	git checkout release_$(RELEASE_CURR)
 	git pull --ff-only $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
@@ -232,7 +235,7 @@ release-create-rc-point: release-ensure-upstream ## Create a release-candidate v
 	sed -i.bak -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "$(RELEASE_CURR_MINOR_NEXT)"/' lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
-	DEV_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
+	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	git add -- packages
 	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
 
@@ -244,7 +247,7 @@ release-create-rc-point: release-ensure-upstream ## Create a release-candidate v
 	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR):release_$(RELEASE_CURR)
 	git push $(RELEASE_UPSTREAM) dev:dev
 
-release-create: release-ensure-upstream ## Create a release branch
+release-create: release-ensure-upstream release-ensure-packaging ## Create a release branch
 	git diff --quiet
 	git checkout master
 	git pull --ff-only $(RELEASE_UPSTREAM) master
@@ -261,7 +264,7 @@ release-create: release-ensure-upstream ## Create a release branch
 	sed -i.bak -e "s/^VERSION_MINOR = .*/VERSION_MINOR = None/" lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
-	./packages/build_scripts/make_all.sh update-version
+	$(IN_VENV) GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	git add -- packages
 	git commit -m "Update version to $(RELEASE_CURR)"
 	git tag -m "Tag version $(RELEASE_CURR)" v$(RELEASE_CURR)
@@ -278,7 +281,7 @@ release-create: release-ensure-upstream ## Create a release branch
 	git push $(RELEASE_UPSTREAM) master:master
 	git push $(RELEASE_UPSTREAM) --tags
 
-release-create-point: ## Create a point release
+release-create-point: release-ensure-upstream release-ensure-packaging ## Create a point release
 	git diff --quiet
 	git checkout master
 	git pull --ff-only $(RELEASE_UPSTREAM) master
@@ -294,7 +297,7 @@ release-create-point: ## Create a point release
 	sed -i.bak -e "s/^VERSION_MINOR = .*/VERSION_MINOR = \"$(RELEASE_CURR_MINOR_NEXT)\"/" lib/galaxy/version.py
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
-	./packages/build_scripts/make_all.sh update-version
+	$(IN_VENV) GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	git add -- packages
 	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
 	git tag -m "Tag version $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)" v$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)
