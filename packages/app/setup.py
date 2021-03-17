@@ -117,8 +117,8 @@ else:
     # In tox, it will cover them anyway.
     requirements = []
 
-DEV_RELEASE = os.environ.get("DEV_RELEASE", None) == "1"
-LOCAL_RELEASE = os.environ.get("LOCAL_RELEASE", None) == "1"
+DEV_RELEASE = os.environ.get("DEV_RELEASE") == "1"
+LOCAL_RELEASE = os.environ.get("LOCAL_RELEASE") == "1"
 if DEV_RELEASE:
     _requirements = []
     version_split = list(version.split('.'))

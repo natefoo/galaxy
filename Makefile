@@ -201,7 +201,7 @@ release-create-rc: release-ensure-upstream release-ensure-packaging ## Create a 
 	rm -f lib/galaxy/version.py.bak Makefile.bak
 	git add lib/galaxy/version.py Makefile
 	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
-	git add -- packages
+	git add -- packages/
 	git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
 	git commit -m "Update version to $(RELEASE_CURR).rc1"
 	git checkout dev
@@ -211,7 +211,7 @@ release-create-rc: release-ensure-upstream release-ensure-packaging ## Create a 
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
 	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
-	git add -- packages
+	git add -- packages/
 	git commit -m "Update version to $(RELEASE_NEXT).dev"
 
 	-git merge version-$(RELEASE_CURR)
@@ -239,7 +239,7 @@ release-create-rc-point: release-ensure-upstream release-ensure-packaging ## Cre
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
 	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
-	git add -- packages
+	git add -- packages/
 	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
 
 	git checkout dev
@@ -268,7 +268,7 @@ release-create: release-ensure-upstream release-ensure-packaging ## Create a rel
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
 	$(IN_VENV) GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
-	git add -- packages
+	git add -- packages/
 	git commit -m "Update version to $(RELEASE_CURR)"
 	git tag -m "Tag version $(RELEASE_CURR)" v$(RELEASE_CURR)
 
@@ -301,7 +301,7 @@ release-create-point: release-ensure-upstream release-ensure-packaging ## Create
 	rm -f lib/galaxy/version.py.bak
 	git add lib/galaxy/version.py
 	$(IN_VENV) GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
-	git add -- packages
+	git add -- packages/
 	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
 	git tag -m "Tag version $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)" v$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)
 	git checkout $(RELEASE_NEXT_BRANCH)
