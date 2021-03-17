@@ -6,7 +6,7 @@ import sys
 import packaging.version
 
 
-DEV_RELEASE = os.environ.get("DEV_RELEASE", None) == "1"
+DEV_RELEASE = os.environ.get("DEV_RELEASE") == "1"
 GALAXY_RELEASE = os.environ.get("GALAXY_RELEASE") == "1"
 
 GALAXY_VERSION_FILE_PATH = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, 'lib', 'galaxy', 'version.py')
