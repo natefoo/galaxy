@@ -320,7 +320,7 @@ release-create-local: release-ensure-prereqs ## Create a local release
 	rm -f lib/galaxy/version.py.bak
 	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	#git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
-	$(IN_VENV) LOCAL_RELEASE=1 ./packages/build_scripts/make_all.sh dist
+	$(IN_VENV) ./packages/build_scripts/make_all.sh dist
 	#git commit -m "Update version to $(RELEASE_CURR)"
 	#git tag -m "Tag version $(RELEASE_CURR)" v$(RELEASE_CURR)
 
