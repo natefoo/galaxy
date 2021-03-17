@@ -114,7 +114,8 @@ endif
 
 release-ensure-prereqs: ## Ensure venv exists with necesesary packages and the source is clean
 	git diff --quiet || { echo "Error: some files have changes"; exit 1; }
-	$(IN_VENV) pip show packaging wheel || { echo "Error: some packages missing in $(VENV)" ; exit 1; }
+	$(IN_VENV) pip show packaging || { echo "Error: packaging package missing in $(VENV)" ; exit 1; }
+	$(IN_VENV) pip show wheel || { echo "Error: wheel package missing in $(VENV)" ; exit 1; }
 
 release-merge-stable-to-next: release-ensure-upstream ## Merge last release into dev
 	git fetch $(RELEASE_UPSTREAM) && git checkout dev && git merge --ff-only $(RELEASE_UPSTREAM)/dev && git merge $(RELEASE_UPSTREAM)/$(RELEASE_PREVIOUS)
