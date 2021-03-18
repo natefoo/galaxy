@@ -314,19 +314,30 @@ GROUPPED_TAGS = OrderedDict([
 # https://api.github.com/repos/galaxyproject/galaxy/compare/release_15.05...dev
 
 
-def print_next_minor_version():
-    prefix = ''
-    minor_version_str = None
+def read_version_component(name):
     with open(GALAXY_VERSION_FILE) as f:
         for line in f:
-            result = re.match(r'VERSION_MINOR = "(.*)"', line)
+            result = re.match(name + r' = "(.*)"', line)
             if result:
-                minor_version_str = result.group(1)
-                break
+                return result.group(1)
+
+
+def print_next_major_version():
+    major_version_str = read_version_component('VERSION_MAJOR')
+    major_version_date = datetime.datetime.strptime(major_version_str, '%y.%m').date()
+    next_version_date = major_version_date + datetime.timedelta(days=(31 * 4))  # goes over days but that's ok
+    print(next_version_date.strftime('%y.%m'))
+
+
+def print_next_minor_version():
+    prefix = ''
+    minor_version_str = read_version_component('VERSION_MINOR')
     try:
         minor_version = int(minor_version_str)
     except (TypeError, ValueError):
-        if minor_version_str.startswith('rc'):
+        if minor_version_str == 'dev':
+            prefix, minor_version = ('rc', 0)
+        elif minor_version_str.startswith('rc'):
             prefix, minor_version = (minor_version_str[:2], int(minor_version_str[2:]))
         else:
             minor_version = 0
@@ -514,6 +525,10 @@ def _get_prs(release_name, state="closed"):
 def main(argv, seen_prs=None):
     newest_release = None
     seen_prs = seen_prs or set()
+
+    if argv[1] == "--print-next-major-version":
+        print_next_major_version()
+        return
 
     if argv[1] == "--print-next-minor-version":
         print_next_minor_version()

@@ -8,7 +8,7 @@ RELEASE_NEXT:=16.04
 RELEASE_LOCAL_TAG?=local
 RELEASE_LOCAL_COMMIT?=$(shell git rev-parse --short HEAD)
 RELEASE_LOCAL_VERSION?=$(RELEASE_LOCAL_TAG)$(shell date -u +%Y%m%dT%H%M%SZ).$(RELEASE_LOCAL_COMMIT)
-RELEASE_SOURCE_BRANCH?=dev
+RELEASE_DEV_BRANCH?=dev
 # TODO: This needs to be updated with create_release_rc
 #RELEASE_NEXT_BRANCH:=release_$(RELEASE_NEXT)
 RELEASE_NEXT_BRANCH:=dev
@@ -191,9 +191,9 @@ serve-selenium-notebooks: ## Serve testing notebooks for Jupyter
 # Release Targets
 release-create-rc: release-ensure-upstream release-ensure-prereqs ## Create a release-candidate branch
 	git fetch $(RELEASE_UPSTREAM)
-	git checkout -b version-$(RELEASE_CURR).rc1 $(RELEASE_UPSTREAM)/$(RELEASE_SOURCE_BRANCH)
+	git checkout -b version-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT) $(RELEASE_UPSTREAM)/$(RELEASE_DEV_BRANCH)
 	sed -i -e 's/^VERSION_MAJOR = .*/VERSION_MAJOR = "$(RELEASE_CURR)"/' lib/galaxy/version.py
-	sed -i -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "rc1"/' lib/galaxy/version.py
+	sed -i -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "$(RELEASE_CURR_MINOR_NEXT)"/' lib/galaxy/version.py
 	sed -i -e 's/^RELEASE_CURR:=.*/RELEASE_CURR:=$(RELEASE_CURR)/' Makefile
 	sed -i -e 's/^RELEASE_NEXT:=.*/RELEASE_NEXT:=$(RELEASE_NEXT)/' Makefile
 	git add lib/galaxy/version.py Makefile
@@ -201,38 +201,38 @@ release-create-rc: release-ensure-upstream release-ensure-prereqs ## Create a re
 	git add -- packages/
 	$(IN_VENV) ./packages/build_scripts/make_all.sh dist
 	#git push $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
-	git commit -m "Update version to $(RELEASE_CURR).rc1"
+	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
 	#git checkout dev
 	#
-	git checkout -b version-$(RELEASE_NEXT).dev $(RELEASE_UPSTREAM)/$(RELEASE_SOURCE_BRANCH)
+	git checkout -b version-$(RELEASE_NEXT).dev $(RELEASE_UPSTREAM)/$(RELEASE_DEV_BRANCH)
 	sed -i -e "s/^VERSION_MAJOR = .*/VERSION_MAJOR = \"$(RELEASE_NEXT)\"/" lib/galaxy/version.py
 	git add lib/galaxy/version.py
 	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	git add -- packages/
 	git commit -m "Update version to $(RELEASE_NEXT).dev"
 
-	-git merge version-$(RELEASE_CURR).rc1
+	-git merge version-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)
 	git checkout --ours -- lib/galaxy/version.py packages/*/galaxy/project_*.py
 	git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
-	git commit -m "Merge branch 'version-$(RELEASE_CURR).rc1' into version-$(RELEASE_NEXT).dev"
-	git push $(MY_UPSTREAM) version-$(RELEASE_CURR).rc1:version-$(RELEASE_CURR).rc1
+	git commit -m "Merge branch 'version-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)' into version-$(RELEASE_NEXT).dev"
+	git push $(MY_UPSTREAM) version-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT):version-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)
 	git push $(MY_UPSTREAM) version-$(RELEASE_NEXT).dev:version-$(RELEASE_NEXT).dev
-	git push $(RELEASE_UPSTREAM) $(RELEASE_UPSTREAM)/$(RELEASE_SOURCE_BRANCH):release_$(RELEASE_CURR)
+	git push $(RELEASE_UPSTREAM) refs/remotes/$(RELEASE_UPSTREAM)/$(RELEASE_DEV_BRANCH):refs/heads/release_$(RELEASE_CURR)
 	# TODO: Use hub to automate these PR creations or push directly.
-	@echo "Open a PR from version-$(RELEASE_CURR) of your fork to release_$(RELEASE_CURR)"
+	@echo "Open a PR from version-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT) of your fork to release_$(RELEASE_CURR)"
 	@echo "Open a PR from version-$(RELEASE_NEXT).dev of your fork to dev"
 
 release-create-rc-point: release-ensure-upstream release-ensure-prereqs ## Create a release-candidate version
-	git checkout release_$(RELEASE_CURR)
-	git pull --ff-only $(RELEASE_UPSTREAM) release_$(RELEASE_CURR)
-	#git push $(MY_UPSTREAM) release_$(RELEASE_CURR)
-	git checkout dev
-	git pull --ff-only $(RELEASE_UPSTREAM) dev
+	git fetch $(RELEASE_UPSTREAM)
+	git checkout -b merge-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)-test $(RELEASE_UPSTREAM)/$(RELEASE_DEV_BRANCH)
 	# Test run of merging. If there are conflicts, it will fail here.
-	git merge release_$(RELEASE_CURR)
-	git checkout release_$(RELEASE_CURR)
-	sed -i.bak -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "$(RELEASE_CURR_MINOR_NEXT)"/' lib/galaxy/version.py
-	rm -f lib/galaxy/version.py.bak
+	git merge --no-ff --no-commit $(RELEASE_UPSTREAM)/release_$(RELEASE_CURR)
+	# TODO: these should be run in either case of success or failure of the previous step
+	git merge --abort
+	git branch -d merge-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)-test
+
+	git checkout -b version-$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT) $(RELEASE_UPSTREAM)/$(RELEASE_DEV_BRANCH)
+	sed -i -e 's/^VERSION_MINOR = .*/VERSION_MINOR = "$(RELEASE_CURR_MINOR_NEXT)"/' lib/galaxy/version.py
 	git add lib/galaxy/version.py
 	$(IN_VENV) DEV_RELEASE=1 GALAXY_RELEASE=1 ./packages/build_scripts/make_all.sh update-version
 	git add -- packages/
@@ -302,6 +302,7 @@ release-create-point: release-ensure-upstream release-ensure-prereqs ## Create a
 	git commit -m "Update version to $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)"
 	git tag -m "Tag version $(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)" v$(RELEASE_CURR).$(RELEASE_CURR_MINOR_NEXT)
 	git checkout $(RELEASE_NEXT_BRANCH)
+	# FIXME: do we need to merge through each subsequent release here?
 	-git merge release_$(RELEASE_CURR)
 	git checkout --ours -- lib/galaxy/version.py packages/*/galaxy/project_*.py
 	git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
