@@ -8,8 +8,9 @@ import packaging.version
 
 DEV_RELEASE = os.environ.get("DEV_RELEASE") == "1"
 GALAXY_RELEASE = os.environ.get("GALAXY_RELEASE") == "1"
+GALAXY_ROOT = os.environ.get("GALAXY_ROOT", os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 
-GALAXY_VERSION_FILE_PATH = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, 'lib', 'galaxy', 'version.py')
+GALAXY_VERSION_FILE_PATH = os.path.join(GALAXY_ROOT, 'lib', 'galaxy', 'version.py')
 
 PROJECT_DIRECTORY = os.getcwd()
 PROJECT_DIRECTORY_NAME = os.path.basename(os.path.abspath(PROJECT_DIRECTORY))
