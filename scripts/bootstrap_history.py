@@ -314,14 +314,6 @@ GROUPPED_TAGS = OrderedDict([
 # https://api.github.com/repos/galaxyproject/galaxy/compare/release_15.05...dev
 
 
-def read_version_component(name):
-    with open(GALAXY_VERSION_FILE) as f:
-        for line in f:
-            result = re.match(name + r' = "(.*)"', line)
-            if result:
-                return result.group(1)
-
-
 def release_issue(argv):
     release_name = argv[2]
     previous_release = _previous_release(release_name)
