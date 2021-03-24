@@ -17,6 +17,11 @@ shopt -s extglob
 : ${UPSTREAM_REMOTE_URL:=git@github.com:galaxyproject/galaxy.git}
 : ${DEV_BRANCH:=dev}
 
+# Vars for local releases
+: ${RELEASE_LOCAL_TAG:=local}
+: ${RELEASE_LOCAL_COMMIT:=$(git rev-parse --short HEAD)}
+: ${RELEASE_LOCAL_VERSION:=${RELEASE_LOCAL_TAG}$(date -u +%Y%m%dT%H%M%SZ).${RELEASE_LOCAL_COMMIT}}
+
 # Only use this for dev/testing/CI to ignore forward merge conflicts
 : ${IGNORE_MERGE_CONFLICT:=false}
 
@@ -40,9 +45,6 @@ CLEAN_TAGS=()
 declare -a PUSH_BRANCHES
 PUSH_BRANCHES=()
 
-declare -A VERSION_SUBS
-
-PACKAGE_VERSION_SCRIPT=
 WORKING_DIR_CLEAN=false
 ERROR=false
 
@@ -51,7 +53,7 @@ PACKAGE_VERSION_TEMPLATE="import packaging.version; print('.'.join(map(str, pack
 PACKAGE_DEV_VERSION_TEMPLATE="import packaging.version; print(packaging.version.parse('VERSION'))"
 
 
-while getopts ":cr:" opt; do
+while getopts ":clr:" opt; do
     case "$opt" in
         c)
             RELEASE_TYPE='rc'
@@ -59,8 +61,11 @@ while getopts ":cr:" opt; do
         r)
             RELEASE_CURR="$OPTARG"
             ;;
+        l)
+            RELEASE_TYPE='local'
+            ;;
         *)
-            echo "usage: $(basename "$0") [-c (force rc)] [-r release version]"
+            echo "usage: $(basename "$0") [-c (force rc)] [-l (local release)] [-r release version]"
             exit 1
             ;;
     esac
@@ -86,10 +91,10 @@ function trap_handler() {
 
 function trap_handler_err() {
     ERROR=true
-    trap_handler
     for tag in "${CLEAN_TAGS[@]}"; do
         log_exec git tag -d "$tag"
     done
+    trap_handler
 }
 
 
@@ -377,7 +382,7 @@ function increment_minor() {
             if [ "$RELEASE_TYPE" == 'rc' ]; then
                 echo "rc$((${minor#rc*} + 1))"
             else
-                echo 'None'
+                echo ''
             fi
             ;;
         None|'')
@@ -399,25 +404,28 @@ function get_version_major() {
 }
 
 
+function get_version_minor() {
+    grep '^VERSION_MINOR' lib/galaxy/version.py | sed -E -e "s/^[^'\"]*['\"]([^'\"]*)['\"]$/\1/" | tr -d '[[:space:]]'
+}
+
+
 function set_version_vars() {
     RELEASE_CURR="$(get_version_major)"
-    RELEASE_CURR_MINOR="$(grep '^VERSION_MINOR' lib/galaxy/version.py | sed -E -e "s/^[^'\"]*['\"]([^'\"]*)['\"]$/\1/" | tr -d '[[:space:]]')"
-    [[ "$RELEASE_CURR_MINOR" =~ .*"None"$ ]] && RELEASE_CURR_MINOR='None'
+    RELEASE_CURR_MINOR="$(get_version_minor)"
+    [[ "$RELEASE_CURR_MINOR" =~ .*"None"$ ]] && RELEASE_CURR_MINOR='0'
     : ${RELEASE_TYPE:=point}
     RELEASE_CURR_MINOR_NEXT="$(increment_minor "$RELEASE_CURR_MINOR")"
-    [ "$RELEASE_CURR_MINOR_NEXT" == 'None' ] && RELEASE_TYPE='initial' || true
+    [ -n "$RELEASE_CURR_MINOR_NEXT" ] || RELEASE_TYPE='initial'
     set_package_version_var
 }
 
 
-function update_version() {
-    local key val
-    log "Updating lib/galaxy/version.py..."
-    for key in "${!VERSION_SUBS[@]}"; do
-        val="${VERSION_SUBS[$key]}"
-        log_exec sed -i -e "s/^${key} = .*/${key} = \"$val\"/" lib/galaxy/version.py
-    done
-    log_exec git diff
+function update_galaxy_version() {
+    local key="$1"
+    local val="$2"
+    local match="${3:-.*}"
+    log "Updating lib/galaxy/version.py for ${key} = ${val}..."
+    log_exec sed -E -i -e "s/^${key} = ${match}/${key} = \"$val\"/" lib/galaxy/version.py
 }
 
 
@@ -437,7 +445,7 @@ function packages_make_all() {
 }
 
 
-function packages_update_version() {
+function update_package_versions() {
     #local packages="$(dirname "$0")/../packages"
     local package_version="${1:-$PACKAGE_VERSION}"
     local project_file
@@ -458,9 +466,7 @@ function packages_update_version() {
 
 function perform_version_update() {
     local tag_version=
-    update_version
-    git add -- lib/galaxy/version.py
-    packages_update_version
+    update_package_versions
     git add -- packages/
     log 'Cleaning package dirs...'
     packages_make_all clean
@@ -490,26 +496,28 @@ function create_release_rc_initial() {
     RELEASE_CURR_MINOR_NEXT='rc1'
     set_package_version_var
     #log_debug "RELEASE_NEXT" "$RELEASE_NEXT"
-    VERSION_SUBS[VERSION_MAJOR]="$RELEASE_CURR"
-    VERSION_SUBS[VERSION_MINOR]="$RELEASE_CURR_MINOR_NEXT"
-
     user_verify_release
 
     local _dev_branch="${UPSTREAM_REMOTE}/${DEV_BRANCH}"
     git_checkout_temp "__release_${RELEASE_CURR}" "$_dev_branch"
 
+    update_galaxy_version 'VERSION_MAJOR' "$RELEASE_CURR"
+    update_galaxy_version 'VERSION_MINOR' "$RELEASE_CURR_MINOR_NEXT"
+    log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
+    git add -- lib/galaxy/version.py
+
     perform_version_update
 
     # Increment version in dev branch
     git_checkout_temp "__release_${RELEASE_NEXT}" "$_dev_branch"
-    VERSION_SUBS=()
-    VERSION_SUBS[VERSION_MAJOR]="$RELEASE_NEXT"
-    VERSION_SUBS[VERSION_MINOR]='dev'
-    update_version
+
+    update_galaxy_version 'VERSION_MAJOR' "$RELEASE_NEXT"
+    update_galaxy_version 'VERSION_MINOR' 'dev'
+    log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
     git add lib/galaxy/version.py
     local package_version=$(packaging_version "${RELEASE_NEXT}.0dev" "true")
     log_debug "Next package version: ${package_version}"
-    packages_update_version "$package_version"
+    update_package_versions "$package_version"
     git add -- packages/
     log_exec git commit -m "Update version to ${RELEASE_NEXT}.dev"
 
@@ -532,15 +540,29 @@ function create_release_rc_initial() {
 }
 
 
-function create_release() {
-    local package_version
-    log 'Fetching upstream changes...'
-    git fetch "$UPSTREAM_REMOTE"
-    if ! branch_exists "${UPSTREAM_REMOTE}/release_${RELEASE_CURR}"; then
-        create_release_rc_initial
-        return
-    fi
+function create_release_local() {
+    RELEASE_CURR_MINOR="$(get_version_minor)"
+    RELEASE_CURR_MINOR_NEXT="${RELEASE_CURR_MINOR}+${RELEASE_LOCAL_VERSION}"
+    set_package_version_var
+    user_verify_release
+    # Append the local portion if this is a point release or the local portion already exists
+    #sed -E -i -e "s/^(VERSION_MINOR = ['\"])([^+]*)[^'\"\]*(['\"])$$/\1\2+$(RELEASE_LOCAL_VERSION)\3/" lib/galaxy/version.py
+    update_galaxy_version 'VERSION_MINOR' "\1+${RELEASE_LOCAL_VERSION}" "['\"]([^+]*)[^'\"\]*['\"]$"
+    # Set the minor version to 0 and append the local version if the release version is not set (e.g. .0)
+    update_galaxy_version 'VERSION_MINOR' "0+${RELEASE_LOCAL_VERSION}" 'None'
+    update_galaxy_version 'VERSION_MINOR' "0+${RELEASE_LOCAL_VERSION}" '""'
+    log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
+    update_package_versions
+    ##git add -- lib/galaxy/version.py packages/*/galaxy/project_*.py
+    packages_make_all clean
+    log 'Building packages (logs in packages/*/make-dist.log)...'
+    packages_make_all dist
+    ##git commit -m "Update version to $(RELEASE_CURR)"
+    ##git tag -m "Tag version $(RELEASE_CURR)" v$(RELEASE_CURR)
+}
 
+
+function create_release_normal() {
     local _release_curr="$RELEASE_CURR"
     local _release_branch="${UPSTREAM_REMOTE}/release_${RELEASE_CURR}"
     git_checkout_temp "__release_${RELEASE_CURR}" "$_release_branch"
@@ -548,14 +570,30 @@ function create_release() {
     [ "$_release_curr" == "$RELEASE_CURR" ] || {
         log_error "Release is incorrect in branch ${_release_branch}: ${_release_curr} != ${RELEASE_CURR}";
         exit 1; }
-    VERSION_SUBS[VERSION_MINOR]="$RELEASE_CURR_MINOR_NEXT"
 
     user_verify_release
     test_forward_merge "$RELEASE_CURR"
 
+    update_galaxy_version 'VERSION_MINOR' "$RELEASE_CURR_MINOR_NEXT"
+    log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
+    git add -- lib/galaxy/version.py
+
     perform_version_update
     perform_forward_merge "$RELEASE_CURR"
     push_merged "$RELEASE_CURR"
+}
+
+
+function create_release() {
+    log 'Fetching upstream changes...'
+    git fetch "$UPSTREAM_REMOTE"
+    if [ "$RELEASE_TYPE" == 'local' ]; then
+        create_release_local
+    elif ! branch_exists "${UPSTREAM_REMOTE}/release_${RELEASE_CURR}"; then
+        create_release_rc_initial
+    else
+        create_release_normal
+    fi
 }
 
 
