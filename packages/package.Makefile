@@ -8,7 +8,7 @@ UPSTREAM?=galaxyproject
 SOURCE_DIR?=galaxy
 BUILD_SCRIPTS_DIR=scripts
 DEV_RELEASE?=0
-VERSION?=$(shell $(IN_VENV) DEV_RELEASE=$(DEV_RELEASE) python $(BUILD_SCRIPTS_DIR)/print_version_for_release.py $(SOURCE_DIR) $(DEV_RELEASE))
+VERSION?=$(shell DEV_RELEASE=$(DEV_RELEASE) python $(BUILD_SCRIPTS_DIR)/print_version_for_release.py $(SOURCE_DIR) $(DEV_RELEASE))
 PROJECT_NAME?=galaxy-$(shell basename $(CURDIR))
 PROJECT_NAME:=$(subst _,-,$(PROJECT_NAME))
 BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
@@ -76,12 +76,6 @@ _release-artifacts:
 	$(IN_VENV) twine upload dist/*
 
 release-artifacts: release-test-artifacts _release-artifacts
-
-print-version:
-	@echo "$(VERSION)"
-
-update-version:
-	sed -i -e 's/^__version__ =.*/__version__ = "$(VERSION)"/' galaxy/project_$(subst -,_,$(PROJECT_NAME)).py
 
 commit-version:
 	$(IN_VENV) DEV_RELEASE=$(DEV_RELEASE) python $(BUILD_SCRIPTS_DIR)/commit_version.py $(SOURCE_DIR) $(VERSION)

@@ -322,28 +322,6 @@ def read_version_component(name):
                 return result.group(1)
 
 
-def print_next_major_version():
-    major_version_str = read_version_component('VERSION_MAJOR')
-    major_version_date = datetime.datetime.strptime(major_version_str, '%y.%m').date()
-    next_version_date = major_version_date + datetime.timedelta(days=(31 * 4))  # goes over days but that's ok
-    print(next_version_date.strftime('%y.%m'))
-
-
-def print_next_minor_version():
-    prefix = ''
-    minor_version_str = read_version_component('VERSION_MINOR')
-    try:
-        minor_version = int(minor_version_str)
-    except (TypeError, ValueError):
-        if minor_version_str == 'dev':
-            prefix, minor_version = ('rc', 0)
-        elif minor_version_str.startswith('rc'):
-            prefix, minor_version = (minor_version_str[:2], int(minor_version_str[2:]))
-        else:
-            minor_version = 0
-    print(f'{prefix}{minor_version + 1}')
-
-
 def release_issue(argv):
     release_name = argv[2]
     previous_release = _previous_release(release_name)
@@ -525,14 +503,6 @@ def _get_prs(release_name, state="closed"):
 def main(argv, seen_prs=None):
     newest_release = None
     seen_prs = seen_prs or set()
-
-    if argv[1] == "--print-next-major-version":
-        print_next_major_version()
-        return
-
-    if argv[1] == "--print-next-minor-version":
-        print_next_minor_version()
-        return
 
     if argv[1] == "--check-blocking-prs":
         check_blocking_prs(argv)
