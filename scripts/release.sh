@@ -2,7 +2,7 @@
 set -euo pipefail
 shopt -s extglob
 
-# TODO: after building packages, committing, and tagging, we should update the package version(s) again to "${RELEASE_CURR_MINOR_NEXT}.dev0"
+# TODO: upload packages
 
 # Things to test:
 #  Update old release
@@ -16,6 +16,7 @@ shopt -s extglob
 : ${UPSTREAM_REMOTE:=upstream}
 : ${UPSTREAM_REMOTE_URL:=git@github.com:galaxyproject/galaxy.git}
 : ${DEV_BRANCH:=dev}
+: ${STABLE_BRANCH:=master}
 
 # Vars for local releases
 : ${RELEASE_LOCAL_TAG:=local}
@@ -34,6 +35,7 @@ BRANCH_CURR=$(git branch --show-current)
 RELEASE_NEXT=
 RELEASE_CURR_MINOR=
 RELEASE_CURR_MINOR_NEXT=
+RELEASE_CURR_MINOR_NEXT_DEV=
 RELEASE_TYPE=
 PACKAGE_VERSION=
 
@@ -184,12 +186,21 @@ function ensure_prereqs() {
 
 function user_verify_release() {
     log "Release Details"
+    local future
+    case "${RELEASE_NEXT:-}" in
+        '')
+            future="${RELEASE_CURR}.${RELEASE_CURR_MINOR_NEXT_DEV}"
+            ;;
+        *)
+            future="${RELEASE_NEXT}.dev0"
+            ;;
+    esac
     cat <<EOF
 Release Type:		${RELEASE_TYPE}
 Major Version:		${RELEASE_CURR}
 Minor Version:		${RELEASE_CURR_MINOR_NEXT}
 Package Version:	${PACKAGE_VERSION}
-Future Version:		${RELEASE_NEXT:-n/a}
+Future Version:		${future}
 EOF
     # TODO: non-interactive flag or env var
     log "Press any key to confirm or ^C to exit"
@@ -273,6 +284,24 @@ function test_forward_merge() {
 }
 
 
+function perform_stable_merge() {
+    [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ] || return
+    local branch_curr=$(git branch --show-current)
+    git_checkout_temp '__stable' "${UPSTREAM_REMOTE}/${STABLE_BRANCH}"
+    local stable=$(get_version_major)
+    local curr_int=$(echo "$RELEASE_CURR" | tr -d .)
+    local stable_int=$(echo "$stable" | tr -d .)
+    if [ "$curr_int" -ge "$stable_int" ]; then
+        log "Release '${RELEASE_CURR}' >= stable branch release '${stable}', merging 'release_${RELEASE_CURR}' to '${STABLE_BRANCH}'"
+        log_exec git merge -m "Merge branch 'release_${RELEASE_CURR}' into '${STABLE_BRANCH}'" "__release_${RELEASE_CURR}"
+        PUSH_BRANCHES+=("__stable:${STABLE_BRANCH}")
+    else
+        log "Release '${RELEASE_CURR}' < stable branch release '${stable}', skipping merge to to '${STABLE_BRANCH}'"
+    fi
+    git checkout "$branch_curr"
+}
+
+
 function _perform_forward_merge() {
     local curr="$1"
     local next="$(release_next "$curr")"
@@ -284,14 +313,15 @@ function _perform_forward_merge() {
     log "Performing forward merge of ${curr} to ${next}"
     branch_exists "$curr_local_branch" || { log_error "Missing expected branch: ${curr_local_branch}"; exit 1; }
     branch_exists "$next_local_branch" && { log_error "Unexpected branch exists: ${next_local_branch}"; exit 1; }
+    PUSH_BRANCHES+=("${curr_local_branch}:release_${curr}")
     if ! branch_exists "$next_branch"; then
         next_branch="${UPSTREAM_REMOTE}/${DEV_BRANCH}"
         recurse=false
+        PUSH_BRANCHES+=("${next_local_branch}:${DEV_BRANCH}")
     fi
     git_checkout_temp "$next_local_branch" "$next_branch"
     # This should necessarily result in conflicts merging version.py
 	log_exec git merge -X ours -m "Merge branch 'release_${curr}' into 'release_${next}'" "$curr_local_branch"
-    PUSH_BRANCHES+=("${curr_local_branch}:release_${curr}")
     if $recurse; then
         _perform_forward_merge "$next"
     fi
@@ -301,18 +331,8 @@ function _perform_forward_merge() {
 function perform_forward_merge() {
     local curr="$1"
     local branch_curr=$(git branch --show-current)
-    if [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ]; then
-        git_checkout_temp '__master' "${UPSTREAM_REMOTE}/master"
-        local master=$(get_version_major)
-        local curr_int=$(echo "$curr" | tr -d .)
-        local master_int=$(echo "$master" | tr -d .)
-        if [ "$curr_int" -ge "$master_int" ]; then
-            log "Release '${curr}' >= master branch release '${master}', merging 'release_${curr}' to 'master'"
-	        log_exec git merge -m "Merge branch 'release_${curr}' into 'master'" "__release_${curr}"
-            PUSH_BRANCHES+=('__master:master')
-        fi
-    fi
     _perform_forward_merge "$@"
+    declare -p PUSH_BRANCHES
     git checkout "$branch_curr"
 }
 
@@ -357,7 +377,8 @@ function set_package_version_var() {
             package_version_minor="$RELEASE_CURR_MINOR_NEXT"
             ;;
         dev)
-            package_version_minor='0dev0'
+            # TODO: you can remove this case once the current dev branch minor version is updated to dev0
+            package_version_minor="0dev0"
             dev_release='true'
             ;;
         *)
@@ -372,11 +393,18 @@ function set_package_version_var() {
 function increment_minor() {
     local minor="$1"
     case "$minor" in
+        # TODO: remove rc after release duplication
         +([0-9]))
             [ "$RELEASE_TYPE" != 'rc' ] || {
                 log_error "Cannot create rc after release (current version: ${RELEASE_CURR}.${minor})";
                 exit 1; }
-            echo "$((minor + 1))"
+            echo "$((minor + 1)).dev0"
+            ;;
+        +([0-9]).dev*)
+            [ "$RELEASE_TYPE" != 'rc' ] || {
+                log_error "Cannot create rc after release (current version: ${RELEASE_CURR}.${minor})";
+                exit 1; }
+            echo "${minor%.*}"
             ;;
         rc*)
             if [ "$RELEASE_TYPE" == 'rc' ]; then
@@ -389,7 +417,7 @@ function increment_minor() {
             [ "$RELEASE_TYPE" != 'rc' ] || {
                 log_error "Cannot create rc after release (current version: ${RELEASE_CURR}.0)";
                 exit 1; }
-            echo '1'
+            echo '1.dev0'
             ;;
         *)
             log_error "Don't know how to increment minor version: ${minor}"
@@ -416,6 +444,7 @@ function set_version_vars() {
     : ${RELEASE_TYPE:=point}
     RELEASE_CURR_MINOR_NEXT="$(increment_minor "$RELEASE_CURR_MINOR")"
     [ -n "$RELEASE_CURR_MINOR_NEXT" ] || RELEASE_TYPE='initial'
+    RELEASE_CURR_MINOR_NEXT_DEV="$(increment_minor "${RELEASE_CURR_MINOR_NEXT}")"
     set_package_version_var
 }
 
@@ -449,8 +478,7 @@ function update_package_versions() {
     #local packages="$(dirname "$0")/../packages"
     local package_version="${1:-$PACKAGE_VERSION}"
     local project_file
-    # FIXME: these vars are not valid for all release types
-    #package_version=$(DEV_RELEASE=1 GALAXY_RELEASE=1 GALAXY_ROOT="$(pwd)" python3 "$PACKAGE_VERSION_SCRIPT")
+    log "Updating package versions to '${package_version}'..."
     (
         cd packages/
         for dir in *; do
@@ -489,13 +517,23 @@ function perform_version_update() {
 }
 
 
+function perform_version_update_dev() {
+    [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ] || return
+    log "Incrementing release version to '${RELEASE_CURR}.${RELEASE_CURR_MINOR_NEXT_DEV}' for development of next point release"
+    update_galaxy_version 'VERSION_MINOR' "$RELEASE_CURR_MINOR_NEXT_DEV"
+    log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
+    git add -- lib/galaxy/version.py
+    update_package_versions
+    git add -- packages/
+    log_exec git commit -m "Update version to ${RELEASE_CURR}.${RELEASE_CURR_MINOR_NEXT_DEV}"
+}
+
+
 function create_release_rc_initial() {
     RELEASE_TYPE='rc-initial'
-    #RELEASE_NEXT=$("${VENV}/bin/python" "${SCRIPTS}/bootstrap_history.py" --print-next-major-version)
     RELEASE_NEXT="$(release_next "$RELEASE_CURR")"
     RELEASE_CURR_MINOR_NEXT='rc1'
     set_package_version_var
-    #log_debug "RELEASE_NEXT" "$RELEASE_NEXT"
     user_verify_release
 
     local _dev_branch="${UPSTREAM_REMOTE}/${DEV_BRANCH}"
@@ -512,14 +550,13 @@ function create_release_rc_initial() {
     git_checkout_temp "__release_${RELEASE_NEXT}" "$_dev_branch"
 
     update_galaxy_version 'VERSION_MAJOR' "$RELEASE_NEXT"
-    update_galaxy_version 'VERSION_MINOR' 'dev'
+    update_galaxy_version 'VERSION_MINOR' 'dev0'
     log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
     git add lib/galaxy/version.py
-    local package_version=$(packaging_version "${RELEASE_NEXT}.0dev" "true")
-    log_debug "Next package version: ${package_version}"
+    local package_version=$(packaging_version "${RELEASE_NEXT}.0dev0" "true")
     update_package_versions "$package_version"
     git add -- packages/
-    log_exec git commit -m "Update version to ${RELEASE_NEXT}.dev"
+    log_exec git commit -m "Update version to ${RELEASE_NEXT}.dev0"
 
     # Resolve merge conflicts
 	log_exec git merge -X ours -m "Merge branch 'release_${RELEASE_CURR}' into 'dev'" "__release_${RELEASE_CURR}"
@@ -534,9 +571,9 @@ function create_release_rc_initial() {
 
     #https://github.com/galaxyproject/galaxy/compare/{branch}...{fork_owner}:{branch}
     log "Open a PR from ${owner}/galaxy:${curr_remote_branch} to galaxyproject/galaxy:release_${RELEASE_CURR}"
-    echo "  https://github.com/galaxyproject/galaxy/compare/release_${RELEASE_CURR}...${owner}:${curr_remote_branch}" 1>&2
+    echo "- https://github.com/galaxyproject/galaxy/compare/release_${RELEASE_CURR}...${owner}:${curr_remote_branch}" 1>&2
     log "Open a PR from ${owner}/galaxy:${next_remote_branch} to galaxyproject/galaxy:dev"
-    echo "  https://github.com/galaxyproject/galaxy/compare/dev...${owner}:${next_remote_branch}" 1>&2
+    echo "- https://github.com/galaxyproject/galaxy/compare/dev...${owner}:${next_remote_branch}" 1>&2
 }
 
 
@@ -579,6 +616,8 @@ function create_release_normal() {
     git add -- lib/galaxy/version.py
 
     perform_version_update
+    perform_stable_merge
+    perform_version_update_dev
     perform_forward_merge "$RELEASE_CURR"
     push_merged "$RELEASE_CURR"
 }
