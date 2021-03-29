@@ -3,13 +3,7 @@ set -euo pipefail
 shopt -s extglob
 
 # TODO: upload packages
-
-# Things to test:
-#  Update old release
-#  Make new rc
-#  Increment rc
-#  New release
-#  Increment release
+# TODO: set dev version in 21.01 (+ 20.09?) branches
 
 : ${VENV:=.venv}
 : ${FORK_REMOTE:=origin}
@@ -23,8 +17,8 @@ shopt -s extglob
 : ${RELEASE_LOCAL_COMMIT:=$(git rev-parse --short HEAD)}
 : ${RELEASE_LOCAL_VERSION:=${RELEASE_LOCAL_TAG}$(date -u +%Y%m%dT%H%M%SZ).${RELEASE_LOCAL_COMMIT}}
 
-# Only use this for dev/testing/CI to ignore forward merge conflicts
-: ${IGNORE_MERGE_CONFLICT:=false}
+# Only use this for dev/testing/CI to ignore forward merge conflicts, skip confirmation and package builds, etc.
+: ${TEST_MODE:=false}
 
 VERIFY_PACKAGES=(wheel packaging)
 SCRIPTS=$(dirname "$0")
@@ -202,9 +196,12 @@ Minor Version:		${RELEASE_CURR_MINOR_NEXT}
 Package Version:	${PACKAGE_VERSION}
 Future Version:		${future}
 EOF
-    # TODO: non-interactive flag or env var
-    log "Press any key to confirm or ^C to exit"
-    read -n 1 -s
+    if $TEST_MODE; then
+        log "Confirmation not requested, proceeding..."
+    else
+        log "Press any key to confirm or ^C to exit"
+        read -n 1 -s
+    fi
 }
 
 
@@ -268,7 +265,7 @@ function _test_forward_merge() {
     fi
     git_checkout_temp "$next_local_branch" "$next_branch"
     # Test the merge even if ignoring just to test the code path
-    $IGNORE_MERGE_CONFLICT && strategy='-X ours'
+    $TEST_MODE && strategy='-X ours'
     log_exec git merge $strategy -m 'test merge; please ignore' "$curr_local_branch" || { 
         log_error "Merging unmodified ${curr} to ${next} failed, resolve upstream first!"; exit 1; }
     if $recurse; then
@@ -285,7 +282,7 @@ function test_forward_merge() {
 
 
 function perform_stable_merge() {
-    [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ] || return
+    [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ] || return 0
     local branch_curr=$(git branch --show-current)
     git_checkout_temp '__stable' "${UPSTREAM_REMOTE}/${STABLE_BRANCH}"
     local stable=$(get_version_major)
@@ -499,7 +496,11 @@ function perform_version_update() {
     log 'Cleaning package dirs...'
     packages_make_all clean
     log 'Building packages (logs in packages/*/make-dist.log)...'
-    packages_make_all dist
+    if $TEST_MODE; then
+        log_debug "Test mode skipping package build"
+    else
+        packages_make_all dist
+    fi
     log 'Committing version changes...'
 	log_exec git commit -m "Update version to ${RELEASE_CURR}.${RELEASE_CURR_MINOR_NEXT}"
     case "$RELEASE_TYPE" in
@@ -518,7 +519,7 @@ function perform_version_update() {
 
 
 function perform_version_update_dev() {
-    [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ] || return
+    [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ] || return 0
     log "Incrementing release version to '${RELEASE_CURR}.${RELEASE_CURR_MINOR_NEXT_DEV}' for development of next point release"
     update_galaxy_version 'VERSION_MINOR' "$RELEASE_CURR_MINOR_NEXT_DEV"
     log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
