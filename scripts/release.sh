@@ -338,7 +338,7 @@ function push_merged() {
         log_exec git push "$UPSTREAM_REMOTE" "$branch"
     done
     if [ "$RELEASE_TYPE" == 'initial' -o "$RELEASE_TYPE" == 'point' ]; then
-        log_exec git push --tags
+        log_exec git push --tags "$UPSTREAM_REMOTE"
     fi
 }
 

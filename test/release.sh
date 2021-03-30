@@ -123,9 +123,11 @@ function make_forks() {
 
 
 function create_venv() {
-    [ ! -d "$VENV" ] || return 0
-    log_exec python3 -m venv "$VENV"
-    log_exec "${VENV}/bin/pip" install wheel packaging
+    if [ ! -d "$VENV" ]; then
+        log_exec python3 -m venv "$VENV"
+        log_exec "${VENV}/bin/pip" install wheel packaging
+    fi
+    . "${VENV}/bin/activate"
 }
 
 
@@ -212,6 +214,9 @@ function test_initial() {
     (
         cd_fork work
         log_exec "${REPO_ROOT}/scripts/release.sh" -r "$TEST_RELEASE_CURR"
+        # re-fetch from upstream to ensure tags are correct
+        log_exec git tag -d $(git tag -l)
+        log_exec git fetch upstream
 
         # verify        major                   minor       ref (branch/tag)
         verify_version  "$TEST_RELEASE_CURR"    ''          "v${TEST_RELEASE_CURR}"
@@ -228,6 +233,8 @@ function test_point() {
     (
         cd_fork work
         log_exec "${REPO_ROOT}/scripts/release.sh" -r "$TEST_RELEASE_CURR"
+        log_exec git tag -d $(git tag -l)
+        log_exec git fetch upstream
 
         # verify        major                   minor       ref (branch/tag)
         verify_version  "$TEST_RELEASE_CURR"    '1'         "$STABLE_BRANCH"
@@ -250,6 +257,8 @@ function test_next() {
         log_exec git push upstream refs/remotes/origin/version-${TEST_RELEASE_NEXT_NEXT}.dev:refs/heads/dev
         # create initial
         log_exec "${REPO_ROOT}/scripts/release.sh" -r "$TEST_RELEASE_NEXT"
+        log_exec git tag -d $(git tag -l)
+        log_exec git fetch upstream
 
         # verify        major                       minor       ref (branch/tag)
         verify_version  "$TEST_RELEASE_NEXT"        ''          "$STABLE_BRANCH"
@@ -267,6 +276,8 @@ function test_prev() {
     (
         cd_fork work
         log_exec "${REPO_ROOT}/scripts/release.sh" -r "$TEST_RELEASE_CURR"
+        log_exec git tag -d $(git tag -l)
+        log_exec git fetch upstream
 
         # verify        major                       minor       ref (branch/tag)
         verify_version  "$TEST_RELEASE_NEXT"        ''          "$STABLE_BRANCH"
