@@ -156,6 +156,25 @@ function verify_version() {
 }
 
 
+function verify_makefile_version() {
+    local major="$1"
+    local ref="$2"
+    local _ref="$2"
+    local restore_branch="$(git branch --show-current)"
+    [ -n "$(git tag -l $ref)" ]  || _ref="upstream/${ref}"
+    log_exec git checkout --no-track -b "__${ref}" "$_ref"
+    if grep -q "^RELEASE_CURR:=${major}$" Makefile; then
+        log "**** RELEASE_CURR '${major}' is correct in Makefile at ref '${ref}'"
+    else
+        log "**** RELEASE_CURR '${major}' is incorrect in Makefile at ref '${ref}':"
+        log "$(grep '^RELEASE_CURR' Makefile)"
+        exit 1
+    fi
+    log_exec git checkout "$restore_branch"
+    log_exec git branch -D "__${ref}"
+}
+
+
 function test_rc() {
     log "Test creation of ${TEST_RELEASE_CURR}.rc1..."
     (
@@ -169,6 +188,7 @@ function test_rc() {
         verify_version  "$TEST_RELEASE_CURR"    'rc1'                       "release_${TEST_RELEASE_CURR}"
         verify_version  "$TEST_RELEASE_NEXT"    'dev0'                      'dev'
         verify_version  "$TEST_RELEASE_PREV"    "$TEST_RELEASE_PREV_MINOR"  "$STABLE_BRANCH"  # should not have changed
+        verify_makefile_version "$TEST_RELEASE_NEXT" 'dev'
     )
 }
 
@@ -182,6 +202,7 @@ function test_rc_point() {
         verify_version  "$TEST_RELEASE_CURR"    'rc2'                       "release_${TEST_RELEASE_CURR}"
         verify_version  "$TEST_RELEASE_NEXT"    'dev0'                      'dev'
         verify_version  "$TEST_RELEASE_PREV"    "$TEST_RELEASE_PREV_MINOR"  "$STABLE_BRANCH"  # should not have changed
+        verify_makefile_version "$TEST_RELEASE_NEXT" 'dev'
     )
 }
 
@@ -197,6 +218,7 @@ function test_initial() {
         verify_version  "$TEST_RELEASE_CURR"    '1.dev0'    "release_${TEST_RELEASE_CURR}"
         verify_version  "$TEST_RELEASE_NEXT"    'dev0'      'dev'
         verify_version  "$TEST_RELEASE_CURR"    ''          "$STABLE_BRANCH"
+        verify_makefile_version "$TEST_RELEASE_NEXT" 'dev'
     )
 }
 
@@ -212,6 +234,7 @@ function test_point() {
         verify_version  "$TEST_RELEASE_CURR"    '1'         "v${TEST_RELEASE_CURR}.1"
         verify_version  "$TEST_RELEASE_CURR"    '2.dev0'    "release_${TEST_RELEASE_CURR}"
         verify_version  "$TEST_RELEASE_NEXT"    'dev0'      'dev'
+        verify_makefile_version "$TEST_RELEASE_NEXT" 'dev'
     )
 }
 
@@ -233,6 +256,8 @@ function test_next() {
         verify_version  "$TEST_RELEASE_NEXT"        ''          "v${TEST_RELEASE_NEXT}"
         verify_version  "$TEST_RELEASE_NEXT"        '1.dev0'    "release_${TEST_RELEASE_NEXT}"
         verify_version  "$TEST_RELEASE_NEXT_NEXT"   'dev0'      'dev'
+        verify_makefile_version "$TEST_RELEASE_NEXT" "release_${TEST_RELEASE_NEXT}"
+        verify_makefile_version "$TEST_RELEASE_NEXT_NEXT" 'dev'
     )
 }
 
@@ -249,6 +274,8 @@ function test_prev() {
         verify_version  "$TEST_RELEASE_CURR"        '3.dev0'    "release_${TEST_RELEASE_CURR}"
         verify_version  "$TEST_RELEASE_NEXT"        '1.dev0'    "release_${TEST_RELEASE_NEXT}"
         verify_version  "$TEST_RELEASE_NEXT_NEXT"   'dev0'      'dev'
+        verify_makefile_version "$TEST_RELEASE_NEXT" "release_${TEST_RELEASE_NEXT}"
+        verify_makefile_version "$TEST_RELEASE_NEXT_NEXT" 'dev'
     )
 }
 

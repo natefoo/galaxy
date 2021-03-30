@@ -21,7 +21,6 @@ shopt -s extglob
 : ${TEST_MODE:=false}
 
 VERIFY_PACKAGES=(wheel packaging)
-SCRIPTS=$(dirname "$0")
 
 BRANCH_CURR=$(git branch --show-current)
 
@@ -71,8 +70,6 @@ done
 function trap_handler() {
     { set +x; } 2>/dev/null
     local file
-    #$TRANSACTION_OPEN && abort_transaction
-    #[ -n "$CHANGELOG" ] && log_exec rm -f "$CHANGELOG"
     $ERROR && log_func=log_error || log_func=log
     $log_func "Cleaning up..."
     if $WORKING_DIR_CLEAN; then
@@ -334,28 +331,8 @@ function perform_forward_merge() {
 }
 
 
-#function _push_merged() {
-#    local curr="$1"
-#    local next="$(release_next "$curr")"
-#    local local_branch="__release_${curr}"
-#    local remote_branch="release_${curr}"
-#    local recurse=true
-#    # perform_forward_merge should have verified all local and upstream branches exist so no checking is done ehre
-#    if ! branch_exists "${UPSTREAM_REMOTE}/${remote_branch}"; then
-#        remote_branch="$DEV_BRANCH"
-#        recurse=false
-#    fi
-#    log "Pushing '${local_branch}' to '${UPSTREAM_REMOTE}/${remote_branch}'"
-#    log_exec git push "$UPSTREAM_REMOTE" "${local_branch}:${remote_branch}"
-#    if $recurse; then
-#        _push_merged "$next"
-#    fi
-#}
-
-
 function push_merged() {
     local curr="$1"
-    #_push_merged "$@"
     for branch in "${PUSH_BRANCHES[@]}"; do
         log "Pushing '${branch}' to remote '${UPSTREAM_REMOTE}'"
         log_exec git push "$UPSTREAM_REMOTE" "$branch"
@@ -390,7 +367,6 @@ function set_package_version_var() {
 function increment_minor() {
     local minor="$1"
     case "$minor" in
-        # TODO: remove rc after release duplication
         +([0-9]))
             [ "$RELEASE_TYPE" != 'rc' ] || {
                 log_error "Cannot create rc after release (current version: ${RELEASE_CURR}.${minor})";
@@ -456,7 +432,6 @@ function update_galaxy_version() {
 
 
 function packages_make_all() {
-    #local packages="$(dirname "$0")/../packages"
     local dir
     # subshell to preserve cwd
     (
@@ -472,7 +447,6 @@ function packages_make_all() {
 
 
 function update_package_versions() {
-    #local packages="$(dirname "$0")/../packages"
     local package_version="${1:-$PACKAGE_VERSION}"
     local project_file
     log "Updating package versions to '${package_version}'..."
@@ -553,7 +527,10 @@ function create_release_rc_initial() {
     update_galaxy_version 'VERSION_MAJOR' "$RELEASE_NEXT"
     update_galaxy_version 'VERSION_MINOR' 'dev0'
     log_exec git diff --exit-code && { log_error 'Missing expected version.py changes'; exit 1; } || true
-    git add lib/galaxy/version.py
+    git add -- lib/galaxy/version.py
+    log_exec sed -i -e "s/^RELEASE_CURR:=.*/RELEASE_CURR:=${RELEASE_NEXT}/" Makefile
+    log_exec git diff --exit-code && { log_error 'Missing expected Makefile changes'; exit 1; } || true
+    git add -- Makefile
     local package_version=$(packaging_version "${RELEASE_NEXT}.0dev0" "true")
     update_package_versions "$package_version"
     git add -- packages/
@@ -584,7 +561,6 @@ function create_release_local() {
     set_package_version_var
     user_verify_release
     # Append the local portion if this is a point release or the local portion already exists
-    #sed -E -i -e "s/^(VERSION_MINOR = ['\"])([^+]*)[^'\"\]*(['\"])$$/\1\2+$(RELEASE_LOCAL_VERSION)\3/" lib/galaxy/version.py
     update_galaxy_version 'VERSION_MINOR' "\1+${RELEASE_LOCAL_VERSION}" "['\"]([^+]*)[^'\"\]*['\"]$"
     # Set the minor version to 0 and append the local version if the release version is not set (e.g. .0)
     update_galaxy_version 'VERSION_MINOR' "0+${RELEASE_LOCAL_VERSION}" 'None'
