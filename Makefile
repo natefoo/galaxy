@@ -3,6 +3,7 @@ VENV?=.venv
 # Source virtualenv to execute command (flake8, sphinx, twine, etc...)
 IN_VENV=if [ -f "$(VENV)/bin/activate" ]; then . "$(VENV)/bin/activate"; fi;
 RELEASE_CURR:=21.05
+RELEASE_UPSTREAM:=upstream
 CONFIG_MANAGE=$(IN_VENV) python lib/galaxy/config/config_manage.py
 PROJECT_URL?=https://github.com/galaxyproject/galaxy
 DOCS_DIR=doc
@@ -93,6 +94,19 @@ config-rebuild: ## Rebuild all sample YAML and RST files from config schema
 
 config-lint: ## lint galaxy YAML configuration file
 	$(CONFIG_MANAGE) lint galaxy
+
+release-ensure-upstream: ## Ensure upstream branch for release commands setup
+ifeq (shell git remote -v | grep $(RELEASE_UPSTREAM), )
+	git remote add $(RELEASE_UPSTREAM) git@github.com:galaxyproject/galaxy.git
+else
+	@echo "Remote $(RELEASE_UPSTREAM) already exists."
+endif
+
+release-merge-stable-to-next: release-ensure-upstream ## Merge last release into dev
+	git fetch $(RELEASE_UPSTREAM) && git checkout dev && git merge --ff-only $(RELEASE_UPSTREAM)/dev && git merge $(RELEASE_UPSTREAM)/$(RELEASE_PREVIOUS)
+
+release-push-dev: release-ensure-upstream # Push local dev branch upstream
+	git push $(RELEASE_UPSTREAM) dev
 
 release-issue: ## Create release issue on github
 	$(IN_VENV) python scripts/bootstrap_history.py --create-release-issue $(RELEASE_CURR)
