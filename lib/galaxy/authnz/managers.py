@@ -305,20 +305,6 @@ class AuthnzManager:
             log.exception(msg)
             return False, msg, (None, None)
 
-    def create_user(self, provider, token, trans, login_redirect_url):
-        try:
-            success, message, backend = self._get_authnz_backend(provider)
-            if success is False:
-                return False, message, (None, None)
-            return success, message, backend.create_user(token, trans, login_redirect_url)
-        except exceptions.AuthenticationFailed:
-            log.exception("Error creating user")
-            raise
-        except Exception:
-            msg = f'An error occurred when creating a user with `{provider}` identity provider.  Please contact an administrator for assistance.'
-            log.exception(msg)
-            return False, msg, (None, None)
-
     def logout(self, provider, trans, post_logout_redirect_url=None):
         """
         Log the user out of the identity provider.
