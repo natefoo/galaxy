@@ -193,7 +193,7 @@ GALAXY_LIB_TOOLS_VERSIONED = {
 
 
 # Tools that need extra files from the tool directory that aren't referenced in the command (e.g. for Pulsar)
-UNREFERENCED_FILES_TOOLS_UNVERSIONED = set([])
+UNREFERENCED_FILES_TOOLS_UNVERSIONED = set(['includer'])
 UNREFERENCED_FILES_TOOLS_VERSIONED = {}
 
 
@@ -323,7 +323,8 @@ class ToolBox(BaseGalaxyToolBox):
                 'unversioned': UNREFERENCED_FILES_TOOLS_UNVERSIONED | local_config['unversioned'],
                 'versioned': {**UNREFERENCED_FILES_TOOLS_VERSIONED, **local_config['versioned']},
             }
-        return self.__unreferenced_tool_files_tools_local_config
+            log.debug(f'#### unreferenced_tool_files_tools: {self.__unreferenced_tool_files_tools}')
+        return self.__unreferenced_tool_files_tools
 
     @property
     def all_requirements(self):
