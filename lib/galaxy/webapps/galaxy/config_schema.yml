@@ -3358,3 +3358,11 @@ mapping:
         required: false
         desc: |
           Path to dynamic tool destinations configuration file.
+
+      unreferenced_tool_files_tools_config_file:
+        type: str
+        default: unreferenced_tool_files_tools.yml
+        path_resolves_to: config_dir
+        required: false
+        desc: |
+          Configuration file for tools that require extra files in the tool directory that are not referenced in the command.

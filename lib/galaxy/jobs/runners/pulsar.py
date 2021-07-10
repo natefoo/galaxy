@@ -326,6 +326,9 @@ class PulsarJobRunner(AsynchronousJobRunner):
         job_destination = job_wrapper.job_destination
         self._populate_parameter_defaults(job_destination)
 
+        if job_wrapper.requires_unreferenced_tool_files:
+            log.debug('######## TOOL REQUIRES ENTIRE TOOL DIRECTORY')
+
         command_line, client, remote_job_config, compute_environment, remote_container = self.__prepare_job(job_wrapper, job_destination)
 
         if not command_line:

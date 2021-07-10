@@ -1002,6 +1002,10 @@ class JobWrapper(HasResourceParameters):
     def use_metadata_binary(self):
         return util.asbool(self.get_destination_configuration('use_metadata_binary', "False"))
 
+    @property
+    def requires_unreferenced_tool_files(self):
+        return self.tool.requires_unreferenced_tool_files
+
     def can_split(self):
         # Should the job handler split this job up?
         return self.app.config.use_tasked_jobs and self.tool.parallelism

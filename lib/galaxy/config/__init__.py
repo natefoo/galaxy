@@ -524,6 +524,7 @@ class GalaxyAppConfiguration(BaseAppConfiguration, CommonConfigurationMixin):
         'shed_tool_data_table_config',
         'tool_destinations_config_file',
         'tool_sheds_config_file',
+        'unreferenced_tool_files_tools_config_file',
         'user_preferences_extra_conf_path',
         'workflow_resource_params_file',
         'workflow_schedulers_config_file',
@@ -1150,6 +1151,12 @@ class ConfiguresGalaxyMixin:
         if ((self.config.check_migrate_tools or os.path.exists(self.config.migrated_tools_config))
                 and self.config.migrated_tools_config not in self.config.tool_configs):
             self.config.tool_configs.append(self.config.migrated_tools_config)
+
+    @property
+    def unreferenced_tool_files_tools_local_config(self):
+        if os.path.exists(self.unreferenced_tool_files_tools_config_file):
+            return yaml.safe_load(self.unreferenced_tool_files_tools_config_file)
+        return None
 
     def _configure_toolbox(self):
         from galaxy import tools

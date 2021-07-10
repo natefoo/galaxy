@@ -192,6 +192,11 @@ GALAXY_LIB_TOOLS_VERSIONED = {
 }
 
 
+# Tools that need extra files from the tool directory that aren't referenced in the command (e.g. for Pulsar)
+UNREFERENCED_FILES_TOOLS_UNVERSIONED = set([])
+UNREFERENCED_FILES_TOOLS_VERSIONED = {}
+
+
 class safe_update(NamedTuple):
     min_version: Union[packaging.version.LegacyVersion, packaging.version.Version]
     current_version: Union[packaging.version.LegacyVersion, packaging.version.Version]
@@ -259,6 +264,7 @@ class ToolBox(BaseGalaxyToolBox):
         self._reload_count = 0
         self.tool_location_fetcher = ToolLocationFetcher()
         self.cache_regions = {}
+        self.__unreferenced_tool_files_tools = None
         # This is here to deal with the old default value, which doesn't make
         # sense in an "installed Galaxy" world.
         # FIXME: ./
@@ -301,6 +307,21 @@ class ToolBox(BaseGalaxyToolBox):
 
     def has_reloaded(self, other_toolbox):
         return self._reload_count != other_toolbox._reload_count
+
+    @property
+    def unreferenced_tool_files_tools(self):
+        if self.__unreferenced_tool_files_tools is None:
+            local_config = {
+                'unversioned': [],
+                'versioned': {},
+            }
+            local_config.update(self.app.config.unreferenced_tool_files_tools_local_config)
+            local_config['unversioned'] = set(local_config['unversioned'])
+            for k, v in local_config['versioned', {}].items():
+                local_config['versioned'][k] = packaging.version.parse(str(v))
+            self.__unreferenced_tool_files_tools['unversioned'] = UNREFERENCED_FILES_TOOLS_UNVERSIONED + local_config['unversioned']
+            self.__unreferenced_tool_files_tools['versioned'] = {**UNREFERENCED_FILES_TOOLS_VERSIONED, **local_config['versioned']}
+        return self.__unreferenced_tool_files_tools_local_config
 
     @property
     def all_requirements(self):
@@ -579,7 +600,7 @@ class Tool(Dictifiable):
             'target',
             'template_macro_params',
             'outputs',
-            'output_collections'
+            'output_collections',
         }
         if name in lazy_attributes:
             self.assert_finalized()
@@ -703,6 +724,16 @@ class Tool(Dictifiable):
             legacy_tool = unversioned_legacy_tool or \
                 (versioned_legacy_tool and self.version_object < GALAXY_LIB_TOOLS_VERSIONED[self.old_id])
             return legacy_tool
+
+    @property
+    def requires_unreferenced_tool_files(self):
+        """Indicates this tool's runtime requires extra files in the tool directory not referenced in the command."""
+        unreferenced_tool_files_tools = self.app.toolbox.unreferenced_tool_files_tools
+        unversioned_legacy_tool = self.old_id in unreferenced_tool_files_tools['unversioned']
+        versioned_legacy_tool = self.old_id in unreferenced_tool_files_tools['versioned']
+        legacy_tool = unversioned_legacy_tool or \
+            (versioned_legacy_tool and self.version_object < GALAXY_LIB_TOOLS_VERSIONED[self.old_id])
+        return legacy_tool
 
     def __get_job_tool_configuration(self, job_params=None):
         """Generalized method for getting this tool's job configuration.
