@@ -999,6 +999,12 @@ class GalaxyAppConfiguration(BaseAppConfiguration, CommonConfigurationMixin):
             if key in self.deprecated_options:
                 log.warning(f"Config option '{key}' is deprecated and will be removed in a future release.  Please consult the latest version of the sample configuration file.")
 
+    @property
+    def unreferenced_tool_files_tools_local_config(self):
+        if os.path.exists(self.unreferenced_tool_files_tools_config_file):
+            return yaml.safe_load(self.unreferenced_tool_files_tools_config_file)
+        return None
+
     @staticmethod
     def _parse_allowed_origin_hostnames(allowed_origin_hostnames):
         """
@@ -1151,12 +1157,6 @@ class ConfiguresGalaxyMixin:
         if ((self.config.check_migrate_tools or os.path.exists(self.config.migrated_tools_config))
                 and self.config.migrated_tools_config not in self.config.tool_configs):
             self.config.tool_configs.append(self.config.migrated_tools_config)
-
-    @property
-    def unreferenced_tool_files_tools_local_config(self):
-        if os.path.exists(self.unreferenced_tool_files_tools_config_file):
-            return yaml.safe_load(self.unreferenced_tool_files_tools_config_file)
-        return None
 
     def _configure_toolbox(self):
         from galaxy import tools

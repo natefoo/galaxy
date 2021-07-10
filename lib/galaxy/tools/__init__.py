@@ -315,12 +315,14 @@ class ToolBox(BaseGalaxyToolBox):
                 'unversioned': [],
                 'versioned': {},
             }
-            local_config.update(self.app.config.unreferenced_tool_files_tools_local_config)
+            local_config.update(self.app.config.unreferenced_tool_files_tools_local_config or {})
             local_config['unversioned'] = set(local_config['unversioned'])
-            for k, v in local_config['versioned', {}].items():
+            for k, v in local_config['versioned'].items():
                 local_config['versioned'][k] = packaging.version.parse(str(v))
-            self.__unreferenced_tool_files_tools['unversioned'] = UNREFERENCED_FILES_TOOLS_UNVERSIONED + local_config['unversioned']
-            self.__unreferenced_tool_files_tools['versioned'] = {**UNREFERENCED_FILES_TOOLS_VERSIONED, **local_config['versioned']}
+            self.__unreferenced_tool_files_tools = {
+                'unversioned': UNREFERENCED_FILES_TOOLS_UNVERSIONED | local_config['unversioned'],
+                'versioned': {**UNREFERENCED_FILES_TOOLS_VERSIONED, **local_config['versioned']},
+            }
         return self.__unreferenced_tool_files_tools_local_config
 
     @property
@@ -732,7 +734,7 @@ class Tool(Dictifiable):
         unversioned_legacy_tool = self.old_id in unreferenced_tool_files_tools['unversioned']
         versioned_legacy_tool = self.old_id in unreferenced_tool_files_tools['versioned']
         legacy_tool = unversioned_legacy_tool or \
-            (versioned_legacy_tool and self.version_object < GALAXY_LIB_TOOLS_VERSIONED[self.old_id])
+            (versioned_legacy_tool and self.version_object < unreferenced_tool_file_tools['versioned'][self.old_id])
         return legacy_tool
 
     def __get_job_tool_configuration(self, job_params=None):
