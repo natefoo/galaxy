@@ -327,7 +327,10 @@ class PulsarJobRunner(AsynchronousJobRunner):
         self._populate_parameter_defaults(job_destination)
 
         if job_wrapper.requires_unreferenced_tool_files:
-            log.debug('######## TOOL REQUIRES ENTIRE TOOL DIRECTORY')
+            log.warning(
+                f"(Pulsar/{job_wrapper.job_id}) requires unreferenced tool files, the entire tool directory for tool "
+                f"'{job_wrapper.tool.id}' will be transferred to remote. The tool should be corrected."
+            )
 
         command_line, client, remote_job_config, compute_environment, remote_container = self.__prepare_job(job_wrapper, job_destination)
 

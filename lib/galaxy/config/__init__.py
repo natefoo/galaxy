@@ -1002,7 +1002,8 @@ class GalaxyAppConfiguration(BaseAppConfiguration, CommonConfigurationMixin):
     @property
     def unreferenced_tool_files_tools_local_config(self):
         if os.path.exists(self.unreferenced_tool_files_tools_config_file):
-            return yaml.safe_load(self.unreferenced_tool_files_tools_config_file)
+            with open(self.unreferenced_tool_files_tools_config_file) as fh:
+                return yaml.safe_load(fh)
         return None
 
     @staticmethod

@@ -193,8 +193,8 @@ GALAXY_LIB_TOOLS_VERSIONED = {
 
 
 # Tools that need extra files from the tool directory that aren't referenced in the command (e.g. for Pulsar)
-UNREFERENCED_FILES_TOOLS_UNVERSIONED = set(['includer'])
-UNREFERENCED_FILES_TOOLS_VERSIONED = {}
+UNREFERENCED_FILES_TOOLS_UNVERSIONED = set(['foo', 'bar'])
+UNREFERENCED_FILES_TOOLS_VERSIONED = {'baz': packaging.version.parse("1.0.0")}
 
 
 class safe_update(NamedTuple):
@@ -323,7 +323,6 @@ class ToolBox(BaseGalaxyToolBox):
                 'unversioned': UNREFERENCED_FILES_TOOLS_UNVERSIONED | local_config['unversioned'],
                 'versioned': {**UNREFERENCED_FILES_TOOLS_VERSIONED, **local_config['versioned']},
             }
-            log.debug(f'#### unreferenced_tool_files_tools: {self.__unreferenced_tool_files_tools}')
         return self.__unreferenced_tool_files_tools
 
     @property
@@ -735,7 +734,7 @@ class Tool(Dictifiable):
         unversioned_legacy_tool = self.old_id in unreferenced_tool_files_tools['unversioned']
         versioned_legacy_tool = self.old_id in unreferenced_tool_files_tools['versioned']
         legacy_tool = unversioned_legacy_tool or \
-            (versioned_legacy_tool and self.version_object < unreferenced_tool_file_tools['versioned'][self.old_id])
+            (versioned_legacy_tool and self.version_object < unreferenced_tool_files_tools['versioned'][self.old_id])
         return legacy_tool
 
     def __get_job_tool_configuration(self, job_params=None):
