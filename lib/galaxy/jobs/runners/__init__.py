@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 import traceback
+from copy import deepcopy
 from queue import (
     Empty,
     Queue,
@@ -446,7 +447,7 @@ class BaseJobRunner:
             job_directory_type=job_directory_type,
         )
 
-        destination_info = job_wrapper.job_destination.params
+        destination_info = deepcopy(job_wrapper.job_destination.params)
         container = self.app.container_finder.find_container(
             tool_info,
             destination_info,
