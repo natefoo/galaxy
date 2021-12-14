@@ -8,22 +8,22 @@ from galaxy.config.config_manage import main
 
 THIS_DIR = os.path.dirname(__file__)
 
-
-def test_reports_conversion_1607_sample():
-    with _config_directory("1607_root_samples") as config_dir:
-        config_dir.manage_cli(["convert", "reports"])
-        config_dir.assert_not_exists("config/reports.ini")
-        config_dir.assert_is_yaml("config/reports.yml")
-        config_dir.assert_moved("config/reports.ini", "config/reports.ini.backup")
-        with config_dir.open("config/reports.yml") as f:
-            config = yaml.safe_load(f)
-        assert "reports" in config
-        reports_config = config["reports"] or {}
-        assert "use_beaker_session" not in reports_config
-
-        assert "uwsgi" in config
-        uwsgi_config = config["uwsgi"]
-        assert uwsgi_config["module"] == "galaxy.webapps.reports.buildapp:uwsgi_app()"
+# TODO: remove or provide conversion to circusd/fastAPI
+# def test_reports_conversion_1607_sample():
+#     with _config_directory("1607_root_samples") as config_dir:
+#         config_dir.manage_cli(["convert", "reports"])
+#         config_dir.assert_not_exists("config/reports.ini")
+#         config_dir.assert_is_yaml("config/reports.yml")
+#         config_dir.assert_moved("config/reports.ini", "config/reports.ini.backup")
+#         with config_dir.open("config/reports.yml") as f:
+#             config = yaml.safe_load(f)
+#         assert "reports" in config
+#         reports_config = config["reports"] or {}
+#         assert "use_beaker_session" not in reports_config
+#
+#         assert "uwsgi" in config
+#         uwsgi_config = config["uwsgi"]
+#         assert uwsgi_config["module"] == "galaxy.webapps.reports.buildapp:uwsgi_app()"
 
 
 def test_reports_build_sample():
@@ -47,19 +47,19 @@ def test_shed_build_sample():
         config_dir.manage_cli(["build_sample_yaml", "tool_shed", "--add-comments"])
         config_dir.assert_is_yaml("config/tool_shed.yml.sample")
 
-
-def test_shed_conversion_1607_prefix():
-    with _config_directory("1607_root_filters") as config_dir:
-        config_dir.manage_cli(["convert", "tool_shed"])
-        config_dir.assert_not_exists("config/tool_shed.ini")
-        config_dir.assert_is_yaml("config/tool_shed.yml")
-        config_dir.assert_moved("config/tool_shed.ini", "config/tool_shed.ini.backup")
-        with config_dir.open("config/tool_shed.yml") as f:
-            config = yaml.safe_load(f)
-        assert "uwsgi" in config
-        uwsgi_config = config["uwsgi"]
-        assert "module" not in uwsgi_config
-        assert uwsgi_config["mount"].startswith("/shed=tool_shed.webapp")
+# TODO: either remove or provide conversion to circusd/fastAPI setup
+# def test_shed_conversion_1607_prefix():
+#     with _config_directory("1607_root_filters") as config_dir:
+#         config_dir.manage_cli(["convert", "tool_shed"])
+#         config_dir.assert_not_exists("config/tool_shed.ini")
+#         config_dir.assert_is_yaml("config/tool_shed.yml")
+#         config_dir.assert_moved("config/tool_shed.ini", "config/tool_shed.ini.backup")
+#         with config_dir.open("config/tool_shed.yml") as f:
+#             config = yaml.safe_load(f)
+#         assert "uwsgi" in config
+#         uwsgi_config = config["uwsgi"]
+#         assert "module" not in uwsgi_config
+#         assert uwsgi_config["mount"].startswith("/shed=tool_shed.webapp")
 
 
 def test_allow_library_path_paste_conversion():
@@ -73,11 +73,6 @@ def test_allow_library_path_paste_conversion():
         assert "galaxy" in config
         galaxy_config = config["galaxy"]
         assert galaxy_config["allow_path_paste"] is True
-
-
-def test_build_uwsgi_yaml():
-    with _config_directory("1607_root_samples") as config_dir:
-        config_dir.manage_cli(["build_uwsgi_yaml"])
 
 
 def test_validate_simple_config():
