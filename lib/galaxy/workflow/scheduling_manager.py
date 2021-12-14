@@ -11,7 +11,7 @@ from galaxy.util import (
 )
 from galaxy.util.custom_logging import get_logger
 from galaxy.util.monitors import Monitors
-from galaxy.web_stack.handlers import ConfiguresHandlers, HANDLER_ASSIGNMENT_METHODS
+from galaxy.web_stack.handlers import ConfiguresHandlers
 from galaxy.web_stack.message import WorkflowSchedulingMessage
 
 log = get_logger(__name__)
@@ -32,9 +32,6 @@ class WorkflowSchedulingManager(ConfiguresHandlers):
     processes.
     """
     DEFAULT_BASE_HANDLER_POOLS = ('workflow-schedulers', 'job-handlers')
-    UNSUPPORTED_HANDLER_ASSIGNMENT_METHODS = {
-        HANDLER_ASSIGNMENT_METHODS.UWSGI_MULE_MESSAGE,
-    }
 
     def __init__(self, app):
         self.app = app
@@ -68,13 +65,7 @@ class WorkflowSchedulingManager(ConfiguresHandlers):
         else:
             self.__handlers_config = app.job_config
 
-        if self._is_workflow_handler():
-            if self.__handlers_config.use_messaging:
-                WorkflowSchedulingMessage().bind_default_handler(self, '_handle_message')
-                self.app.application_stack.register_message_handler(
-                    self._handle_message,
-                    name=WorkflowSchedulingMessage.target)
-        else:
+        if not self._is_workflow_handler():
             # Process should not schedule workflows but should check for any unassigned to handlers
             self.__startup_recovery()
 

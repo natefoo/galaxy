@@ -81,7 +81,6 @@ class MockApp(di.Container, GalaxyDataTestApp):
         self.job_config = Bunch(
             dynamic_params=None,
             destinations={},
-            use_messaging=False,
             assign_handler=lambda *args, **kwargs: None
         )
         self.tool_data_tables = ToolDataTableManager(tool_data_path=self.config.tool_data_path)

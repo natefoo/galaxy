@@ -344,9 +344,6 @@ class UniverseApplication(StructuredApp, GalaxyManagerApplication):
             self.haltables.append(("HistoryAuditTablePruneTask", self.prune_history_audit_task.shutdown))
         # Start the job manager
         self.application_stack.register_postfork_function(self.job_manager.start)
-        # If app is not job handler but uses mule messaging.
-        # Can be removed when removing mule support.
-        self.job_manager._check_jobs_at_startup()
         self.proxy_manager = ProxyManager(self.config)
 
         from galaxy.workflow import scheduling_manager

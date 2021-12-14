@@ -135,7 +135,7 @@ class InstalledRepositoryMetadataManager(MetadataGenerator):
             message = "Successfully reset metadata on %d %s.  " % \
                 (successful_count, inflector.cond_plural(successful_count, "repository"))
             if unsuccessful_count:
-                message += "Error setting metadata on %d %s - see the paster log for details.  " % \
+                message += "Error setting metadata on %d %s - see the galaxy log for details.  " % \
                     (unsuccessful_count, inflector.cond_plural(unsuccessful_count, "repository"))
         else:
             message = 'Select at least one repository to on which to reset all metadata.'
