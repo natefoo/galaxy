@@ -1,0 +1,19 @@
+[circus]
+debug = True
+include = celery.ini
+
+[env]
+PYTHONPATH=lib
+
+[watcher:web]
+cmd = gunicorn 'tool_shed.webapp.fast_factory:factory()' --timeout 300 --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b fd://$(circus.sockets.web)
+send_hup = true
+numprocesses = 1
+use_sockets = True
+stop_signal = TERM
+stop_children = True
+copy_env = True
+
+[socket:web]
+host = 0.0.0.0
+port = 9090
