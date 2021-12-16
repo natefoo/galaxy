@@ -756,27 +756,37 @@ class UwsgiServerWrapper(ServerWrapper):
         self._t.join()
 
 
-def launch_uvicorn(webapp_factory, prefix=DEFAULT_CONFIG_PREFIX, galaxy_config=None, config_object=None):
-    name = prefix.lower()
+def launch_server(app, webapp_factory, kwargs, prefix=DEFAULT_CONFIG_PREFIX, config_object=None):
+    """Launch a web server for a given app using supplied factory.
 
+    Consistently read either GALAXY_TEST_HOST and GALAXY_TEST_PORT or
+    TOOL_SHED_TEST_HOST and TOOL_SHED_TEST_PORT and ensure these are
+    all set after this method has been called.
+    """
+    name = prefix.lower()
     host, port = explicitly_configured_host_and_port(prefix, config_object)
     port = attempt_ports(port)
-    gx_app = build_galaxy_app(galaxy_config)
-
-    gx_wsgi_webapp = webapp_factory(
-        galaxy_config['global_conf'],
-        app=gx_app,
+    wsgi_webapp = webapp_factory(
+        kwargs['global_conf'],
+        app=app,
         use_translogger=False,
         static_enabled=True,
         register_shutdown_at_exit=False
     )
-    from galaxy.webapps.galaxy.fast_app import initialize_fast_app
-    app = initialize_fast_app(gx_wsgi_webapp, gx_app)
-    server, port, thread = uvicorn_serve(app, host=host, port=port)
+    if name == 'galaxy':
+        from galaxy.webapps.galaxy.fast_app import initialize_fast_app as init_galaxy_fast_app
+        asgi_app = init_galaxy_fast_app(wsgi_webapp, app)
+    elif name == 'tool_shed':
+        from tool_shed.webapp.fast_app import initialize_fast_app as init_tool_shed_fast_app
+        asgi_app = init_tool_shed_fast_app(wsgi_webapp)
+    else:
+        raise NotImplementedError(f"Launching {name} not implemented")
+    server, port, thread = uvicorn_serve(asgi_app, host=host, port=port)
+    set_and_wait_for_http_target(prefix, host, port)
     set_and_wait_for_http_target(prefix, host, port)
     log.info(f"Embedded uvicorn web server for {name} started at {host}:{port}")
     return EmbeddedServerWrapper(
-        gx_app, server, name, host, port, thread=thread
+        app, server, name, host, port, thread=thread,
     )
 
 
@@ -929,12 +939,13 @@ class GalaxyTestDriver(TestDriver):
                 if handle_galaxy_config_kwds is not None:
                     handle_galaxy_config_kwds(galaxy_config)
 
-            server_wrapper = launch_uvicorn(
-                lambda *args, **kwd: buildapp.app_factory(*args, wsgi_preflight=False, **kwd),
-                galaxy_config=galaxy_config,
+            self.app = build_galaxy_app(galaxy_config)
+            server_wrapper = launch_server(
+                app=self.app,
+                webapp_factory=lambda *args, **kwd: buildapp.app_factory(*args, wsgi_preflight=False, **kwd),
+                kwargs=galaxy_config,
                 config_object=config_object,
             )
-            self.app = server_wrapper.app
             self.server_wrappers.append(server_wrapper)
         else:
             log.info(f"Functional tests will be run against test external Galaxy server {self.external_galaxy}")
