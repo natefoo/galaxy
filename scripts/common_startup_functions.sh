@@ -138,7 +138,7 @@ find_server() {
     default_webserver="circusd"
     APP_WEBSERVER=${APP_WEBSERVER:-$default_webserver}
     # TODO: use circusd.ini if it exists, else use circusd.ini.sample ?
-    CIRCUS_CONFIG_FILE=${CIRCUS_CONFIG_FILE:-config/dev.ini}
+    CIRCUS_CONFIG_FILE=${CIRCUS_CONFIG_FILE:-config/${server_app}_circus.ini}
     if [ "$APP_WEBSERVER" = "circusd" ]; then
         if [ -n "$circusctl_args" ]; then
             run_server="circusctl"
