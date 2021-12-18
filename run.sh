@@ -44,15 +44,14 @@ then
 fi
 
 set_galaxy_config_file_var
+set_galaxy_user
 
 if [ "$INITIALIZE_TOOL_DEPENDENCIES" -eq 1 ]; then
     # Install Conda environment if needed.
     python ./scripts/manage_tool_dependencies.py init_if_needed
 fi
 
-[ -n "$GALAXY_UWSGI" ] && APP_WEBSERVER='uwsgi'
 find_server "${GALAXY_CONFIG_FILE:-none}" galaxy
-
 echo "Executing: $run_server $server_args"
 # args are properly quoted so use eval
 eval GALAXY_ROOT_DIR="." $run_server $server_args

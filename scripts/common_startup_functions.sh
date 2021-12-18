@@ -25,13 +25,13 @@ parse_common_args() {
                 ;;
             --stop-daemon|stop)
                 common_startup_args="$common_startup_args --stop-daemon"
-                circusctl_args="$circusctl_args quit"
+                supervisorctl_args="$supervisorctl_args quit"
                 add_pid_arg=1
                 stop_daemon_arg_set=1
                 shift
                 ;;
             --restart|restart)
-                circusctl_args="$circusctl_args restart"
+                supervisorctl_args="$supervisorctl_args restart"
                 add_pid_arg=1
                 add_log_arg=1
                 restart_arg_set=1
@@ -39,7 +39,7 @@ parse_common_args() {
                 shift
                 ;;
             --daemon|start)
-                circusd_args="$circusd_args --daemon --log-output $LOG_FILE"
+                supervisord_args="$supervisord_args --daemon --log-output $LOG_FILE"
                 gunicorn_args="$gunicorn_args --daemon"
                 GALAXY_DAEMON_LOG="$GALAXY_LOG"
                 add_pid_arg=1
@@ -50,7 +50,7 @@ parse_common_args() {
                 shift
                 ;;
             --status|status)
-                circusctl_args="$circusctl_args $1"
+                supervisorctl_args="$supervisorctl_args $1"
                 add_pid_arg=1
                 shift
                 ;;
@@ -62,7 +62,7 @@ parse_common_args() {
                 break
                 ;;
             *)
-                circusctl_args="$circusctl_args $1"
+                supervisorctl_args="$supervisorctl_args $1"
                 shift
                 ;;
         esac
@@ -131,25 +131,26 @@ set_galaxy_config_file_var() {
     fi
 }
 
+set_galaxy_user() {
+    if [ -z "$GALAXY_USER_NAME" ]; then
+        GALAXY_USER=$(id -u -n)
+        export GALAXY_USER
+    fi
+}
+
 find_server() {
     server_config=$1
     server_app=$2
     arg_getter_args=
-    default_webserver="circusd"
-    APP_WEBSERVER=${APP_WEBSERVER:-$default_webserver}
-    # TODO: use circusd.ini if it exists, else use circusd.ini.sample ?
-    CIRCUS_CONFIG_FILE=${CIRCUS_CONFIG_FILE:-config/${server_app}_circus.ini}
-    if [ "$APP_WEBSERVER" = "circusd" ]; then
-        if [ -n "$circusctl_args" ]; then
-            run_server="circusctl"
-            server_args="$circusctl_args"
-        else
-            run_server="circusd"
-            export GALAXY_DAEMON_LOG=$GALAXY_DAEMON_LOG
-            server_args="$CIRCUS_CONFIG_FILE $circusd_args"
-        fi
+    # TODO: use supervisord.ini if it exists, else use supervisord.ini.sample ?
+    SUPERVISORD_CONFIG_FILE=${SUPERVISORD_CONFIG_FILE:-config/supervisor/${server_app}_supervisord.conf}
+    if [ -n "$supervisorctl_args" ]; then
+        run_server="supervisorctl"
+        server_args="$supervisorctl_args"
     else
-        echo "WEBSERVER method $APP_WEBSERVER not supported"
+        run_server="supervisord"
+        export GALAXY_DAEMON_LOG=$GALAXY_DAEMON_LOG
+        server_args="-c $SUPERVISORD_CONFIG_FILE $supervisord_args"
     fi
 }
 

@@ -8,7 +8,7 @@ from galaxy.config.config_manage import main
 
 THIS_DIR = os.path.dirname(__file__)
 
-# TODO: remove or provide conversion to circusd/fastAPI
+# TODO: remove or provide conversion to supervisord/fastAPI
 # def test_reports_conversion_1607_sample():
 #     with _config_directory("1607_root_samples") as config_dir:
 #         config_dir.manage_cli(["convert", "reports"])
@@ -47,7 +47,7 @@ def test_shed_build_sample():
         config_dir.manage_cli(["build_sample_yaml", "tool_shed", "--add-comments"])
         config_dir.assert_is_yaml("config/tool_shed.yml.sample")
 
-# TODO: either remove or provide conversion to circusd/fastAPI setup
+# TODO: either remove or provide conversion to supervisord/fastAPI setup
 # def test_shed_conversion_1607_prefix():
 #     with _config_directory("1607_root_filters") as config_dir:
 #         config_dir.manage_cli(["convert", "tool_shed"])
