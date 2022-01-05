@@ -25,7 +25,7 @@ parse_common_args() {
                 ;;
             --stop-daemon|stop)
                 common_startup_args="$common_startup_args --stop-daemon"
-                supervisorctl_args="$supervisorctl_args quit"
+                supervisorctl_args="$supervisorctl_args shutdown"
                 add_pid_arg=1
                 stop_daemon_arg_set=1
                 shift
@@ -146,11 +146,21 @@ find_server() {
     SUPERVISORD_CONFIG_FILE=${SUPERVISORD_CONFIG_FILE:-config/supervisor/${server_app}_supervisord.conf}
     if [ -n "$supervisorctl_args" ]; then
         run_server="supervisorctl"
-        server_args="$supervisorctl_args"
+        server_args="-c $SUPERVISORD_CONFIG_FILE $supervisorctl_args"
     else
         run_server="supervisord"
         export GALAXY_DAEMON_LOG=$GALAXY_DAEMON_LOG
         server_args="-c $SUPERVISORD_CONFIG_FILE $supervisord_args"
+        # FIXME FIXME FIXME
+        #: ${GALAXY_ROOT_DIR:=$(pwd)}
+        : ${GALAXY_JOB_HANDLER_COUNT:=1}
+        : ${GALAXY_UMASK:=$(umask)}
+        : ${GALAXY_LOG_DIR:=$(pwd)/log}
+        : ${GALAXY_BIND_IP:=0.0.0.0}
+        : ${GALAXY_PORT:=8080}
+        mkdir -p "$GALAXY_LOG_DIR"
+        #export GALAXY_ROOT_DIR GALAXY_JOB_HANDLER_COUNT GALAXY_UMASK GALAXY_LOG_DIR
+        export GALAXY_JOB_HANDLER_COUNT GALAXY_UMASK GALAXY_LOG_DIR GALAXY_BIND_IP GALAXY_PORT
     fi
 }
 
