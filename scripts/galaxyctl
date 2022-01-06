@@ -1,0 +1,42 @@
+#!/bin/sh
+set -e
+
+deploy_root="$(dirname $0)/.."
+if command -v realpath >/dev/null; then
+    deploy_root="$(realpath "$deploy_root")"
+fi
+
+if [ -z "$GALAXY_LOCAL_ENV_FILE" ];
+then
+    GALAXY_LOCAL_ENV_FILE="${deploy_root}/config/local_env.sh"
+fi
+
+if [ -f "$GALAXY_LOCAL_ENV_FILE" ];
+then
+    . "$GALAXY_LOCAL_ENV_FILE"
+fi
+
+if [ -z "$GALAXY_ROOT_DIR" ]; then
+    echo "ERROR: \$GALAXY_ROOT_DIR unset (hint: set in $GALAXY_LOCAL_ENV_FILE)"
+fi
+
+. "${GALAXY_ROOT_DIR}/scripts/common_startup_functions.sh"
+
+: ${GALAXY_VIRTUAL_ENV:="${deploy_root}/data/venv"}
+: ${GALAXY_CONFIG_FILE:="${deploy_root}/config/galaxy.yml"}
+
+export GALAXY_VIRTUAL_ENV GALAXY_CONFIG_FILE
+
+parse_common_args $@
+
+setup_python
+
+set_galaxy_config_file_var
+
+#cd "$GALAXY_ROOT_DIR"
+#echo "Changed to Galaxy root dir $GALAXY_ROOT_DIR"
+
+find_server "${GALAXY_CONFIG_FILE}" galaxy
+echo "Executing: $run_server $server_args"
+# args are properly quoted so use eval
+eval $run_server $server_args

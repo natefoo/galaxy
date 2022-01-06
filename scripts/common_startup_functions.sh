@@ -121,7 +121,7 @@ setup_python() {
     # in case you don't.
     [ -n "$PYTHONPATH" ] && echo 'WARNING: $PYTHONPATH is set, this can cause problems importing Galaxy dependencies'
 
-    python ./scripts/check_python.py || exit 1
+    python "${GALAXY_ROOT_DIR:-.}/scripts/check_python.py" || exit 1
 }
 
 set_galaxy_config_file_var() {
@@ -143,7 +143,8 @@ find_server() {
     server_app=$2
     arg_getter_args=
     # TODO: use supervisord.ini if it exists, else use supervisord.ini.sample ?
-    SUPERVISORD_CONFIG_FILE=${SUPERVISORD_CONFIG_FILE:-config/supervisor/${server_app}_supervisord.conf}
+    # FIXME FIXME FIXME
+    SUPERVISORD_CONFIG_FILE=${SUPERVISORD_CONFIG_FILE:-${GALAXY_ROOT_DIR}/config/supervisor/${server_app}_supervisord.conf}
     if [ -n "$supervisorctl_args" ]; then
         run_server="supervisorctl"
         server_args="-c $SUPERVISORD_CONFIG_FILE $supervisorctl_args"
@@ -151,16 +152,6 @@ find_server() {
         run_server="supervisord"
         export GALAXY_DAEMON_LOG=$GALAXY_DAEMON_LOG
         server_args="-c $SUPERVISORD_CONFIG_FILE $supervisord_args"
-        # FIXME FIXME FIXME
-        #: ${GALAXY_ROOT_DIR:=$(pwd)}
-        : ${GALAXY_JOB_HANDLER_COUNT:=1}
-        : ${GALAXY_UMASK:=$(umask)}
-        : ${GALAXY_LOG_DIR:=$(pwd)/log}
-        : ${GALAXY_BIND_IP:=0.0.0.0}
-        : ${GALAXY_PORT:=8080}
-        mkdir -p "$GALAXY_LOG_DIR"
-        #export GALAXY_ROOT_DIR GALAXY_JOB_HANDLER_COUNT GALAXY_UMASK GALAXY_LOG_DIR
-        export GALAXY_JOB_HANDLER_COUNT GALAXY_UMASK GALAXY_LOG_DIR GALAXY_BIND_IP GALAXY_PORT
     fi
 }
 
