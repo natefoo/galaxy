@@ -602,7 +602,10 @@ class PulsarJobRunner(AsynchronousJobRunner):
         if self.app.config.nginx_upload_job_files_path:
             endpoint_base = "%s" + self.app.config.nginx_upload_job_files_path + "?job_id=%s&job_key=%s"
         files_endpoint = endpoint_base % (self.galaxy_url, encoded_job_id, job_key)
-        get_client_kwds = dict(job_id=str(job_id), files_endpoint=files_endpoint, env=env)
+        files_endpoint_up = files_endpoint
+        files_endpoint_down = f"http://tusd:1080/files/"
+        get_client_kwds = dict(job_id=str(job_id), files_endpoint=files_endpoint, files_endpoint_up=files_endpoint_up,
+                files_endpoint_down=files_endpoint_down, env=env)
         # Turn MutableDict into standard dict for pulsar consumption
         job_destination_params = dict(job_destination_params.items())
         return self.client_manager.get_client(job_destination_params, **get_client_kwds)
