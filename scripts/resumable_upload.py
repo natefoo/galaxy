@@ -3,6 +3,7 @@ import os
 
 import click
 import requests
+from rich import progress
 from tusclient import client
 from tusclient.storage import filestorage
 
@@ -36,7 +37,27 @@ def upload_file(url, path, api_key, history_id, file_type="auto", dbkey="?", fil
         storage = filestorage.FileStorage(storage)
     uploader = my_client.uploader(path, metadata=metadata, url_storage=storage)
     uploader.chunk_size = CHUNK_SIZE
-    uploader.upload()
+    # TODO: this is uploader.get_file_size() in tusclient 1.0.0
+    stop_at = uploader.file_size
+
+    total = stop_at
+    columns = (
+        progress.TextColumn("[progress.description]{task.description}"),
+        progress.BarColumn(),
+        progress.DownloadColumn(),
+        progress.TransferSpeedColumn(),
+        progress.TextColumn("eta"),
+        progress.TimeRemainingColumn(),
+    )
+
+    bar = progress.Progress(*columns)
+    task_id = bar.add_task(os.path.basename(filename), total=total)
+    with bar:
+        last_offset = 0
+        while uploader.offset < stop_at:
+            uploader.upload_chunk()
+            bar.update(task_id, advance=(uploader.offset - last_offset))
+            last_offset = uploader.offset
 
     # Extract session from created upload URL
     session_id = uploader.url.rsplit("/", 1)[1]
