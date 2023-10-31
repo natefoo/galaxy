@@ -83,6 +83,47 @@ class JobHandler(JobHandlerI):
 
     def __init__(self, app):
         self.app = app
+        import logging
+        logging.config.dictConfig({
+            "disable_existing_loggers": False,
+            "version": 1,
+            "loggers": {
+                "galaxy.jobs.handler": {
+                    "level": "TRACE",
+                    "qualname": "galaxy.jobs.handler",
+                    "propagate": False,
+                    "handlers": ["console", "trace"],
+                }
+            },
+            "filters": {
+                "stack": {
+                    "()": "galaxy.web_stack.application_stack_log_filter",
+                },
+            },
+            "handlers": {
+                "console": {
+                    "class": "logging.StreamHandler",
+                    "formatter": "stack",
+                    "level": "DEBUG",
+                    "stream": "ext://sys.stderr",
+                    "filters": ["stack"],
+                },
+                "trace": {
+                    "class": "logging.handlers.RotatingFileHandler",
+                    "formatter": "stack",
+                    "level": "TRACE",
+                    "filename": f"{app.config.trace_log_dir}/trace-{app.config.server_name}.log",
+                    "maxBytes": app.config.trace_log_size,
+                    "backupCount": app.config.trace_log_keep,
+                    "filters": ["stack"],
+                }
+            },
+            "formatters": {
+                "stack": {
+                    "()": "galaxy.web_stack.application_stack_log_formatter",
+                },
+            },
+        })
         # The dispatcher launches the underlying job runners
         self.dispatcher = DefaultJobDispatcher(app)
         # Queues for starting and stopping jobs
@@ -810,6 +851,7 @@ class JobHandlerQueue(BaseJobHandlerQueue):
         self.user_job_count = None
         self.user_job_count_per_destination = None
         self.total_job_count_per_destination = None
+        log.trace("#### __clear_job_count()")
 
     def get_user_job_count(self, user_id):
         self.__cache_user_job_count()
@@ -829,6 +871,7 @@ class JobHandlerQueue(BaseJobHandlerQueue):
             for row in result:
                 # there should only be one row
                 rval += row[0]
+        log.trace(f"#### get_user_job_count({user_id=}) -> {rval}")
         return rval
 
     def __cache_user_job_count(self):
@@ -848,6 +891,7 @@ class JobHandlerQueue(BaseJobHandlerQueue):
                 .group_by(model.Job.table.c.user_id)
             )
             for row in query:
+                log.trace(f"#### user job count: {row}")
                 self.user_job_count[row[0]] = row[1]
         elif self.user_job_count is None:
             self.user_job_count = {}
@@ -879,12 +923,26 @@ class JobHandlerQueue(BaseJobHandlerQueue):
             for row in result:
                 # Add the count from the database to the cached count
                 rval[row["destination_id"]] = rval.get(row["destination_id"], 0) + row["job_count"]
+        log.trace(f"#### get_user_job_count_per_destination({user_id=}) -> {rval}")
         return rval
 
     def __cache_user_job_count_per_destination(self):
         # Cache the job count if necessary
         if self.user_job_count_per_destination is None and self.app.config.cache_user_job_count:
             self.user_job_count_per_destination = {}
+            #stmt = (
+            #    select(
+            #        [
+            #            model.Job.table.c.user_id,
+            #            model.Job.table.c.destination_id,
+            #            func.count(model.Job.table.c.user_id).label("job_count"),
+            #        ]
+            #    )
+            #    .where(and_(model.Job.table.c.state.in_((model.Job.states.QUEUED, model.Job.states.RUNNING))))
+            #    .group_by(model.Job.table.c.user_id, model.Job.table.c.destination_id)
+            #)
+            #log.trace(str(stmt.compile(self.sa_session.bind, compile_kwargs={"render_postcompile": True, "literal_binds": True})))
+            #result = self.sa_session.execute(stmt)
             result = self.sa_session.execute(
                 select(
                     [
@@ -897,6 +955,7 @@ class JobHandlerQueue(BaseJobHandlerQueue):
                 .group_by(model.Job.table.c.user_id, model.Job.table.c.destination_id)
             )
             for row in result:
+                log.trace(f"#### user job count per destination: {row}")
                 if row["user_id"] not in self.user_job_count_per_destination:
                     self.user_job_count_per_destination[row["user_id"]] = {}
                 self.user_job_count_per_destination[row["user_id"]][row["destination_id"]] = row["job_count"]

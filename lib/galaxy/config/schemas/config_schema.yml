@@ -3871,3 +3871,18 @@ mapping:
         default: 86400
         desc: |
           The interval in seconds between attempts to delete all expired notifications from the database (every 24 hours by default). Runs in a Celery task.
+
+      trace_log_dir:
+        type: str
+        required: false
+        default: /tmp
+
+      trace_log_size:
+        type: int
+        required: false
+        default: 52428800
+
+      trace_log_keep:
+        type: int
+        required: false
+        default: 10
