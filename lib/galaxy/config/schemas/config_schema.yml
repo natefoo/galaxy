@@ -4137,3 +4137,18 @@ mapping:
           Number of seconds before file source content listings are refreshed. Shorter times will result in more
           queries while browsing a file sources. Longer times will result in fewer requests to file sources but
           outdated contents might be displayed to the user. Currently only affects s3fs file sources.
+
+      trace_log_dir:
+        type: str
+        required: false
+        default: /tmp
+
+      trace_log_size:
+        type: int
+        required: false
+        default: 52428800
+
+      trace_log_keep:
+        type: int
+        required: false
+        default: 10
