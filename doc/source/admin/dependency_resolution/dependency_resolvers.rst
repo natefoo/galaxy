@@ -4,6 +4,12 @@
 Dependency Resolvers in Galaxy
 ==============================
 
+.. important::
+
+   There are two systems in Galaxy for resolving a tool's dependencies: dependency resolvers (this page) and
+   :doc:`container resolvers <container_resolvers>`. By default, Galaxy uses dependency resolvers (no containers). It
+   is possible to use both simultaneously, but they are configured separately.
+
 There are two parts to building a link between Galaxy and command line bioinformatics tools: (1) the tool XML that
 specifies a mapping between the Galaxy web user interface and the tool command line, and (2) the actual command-line
 tools, known as Galaxy *tool dependencies*, which must be installed and available on the system(s) where Galaxy is

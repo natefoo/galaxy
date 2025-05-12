@@ -2,88 +2,180 @@
 Containers for Tool Dependencies
 ================================
 
-Galaxy tools (also called wrappers) are able to use Conda packages
-(see more information in our :doc:`Galaxy Conda documentation <../conda_faq>`) and Docker containers as dependency resolvers.
-The IUC_ recommends to use Conda packages as the primary dependency resolver, mainly because Docker is not
-available on every (HPC-) system. Conda on the other hand can be installed by Galaxy and maintained
-entirely in user-space. Nevertheless, Docker and containers in general have some unique features and
-there are many use-cases in the Galaxy community that make containerized tools very appealing.
-
-Since 2014 Galaxy supports running tools in Docker containers via a special `container annotation`_ inside of the 
-requirement field.
+Galaxy tools (also called wrappers) are able to use both Conda_ packages (see more information in our :doc:`Galaxy Conda
+documentation <../conda_faq>`) and Docker_ containers to resolve their dependencies (the actual software "wrapped" as a
+Galaxy tool). These dependencies are specified in :doc:`the wrapper XML <../../dev/schema>` using a `requirement
+annotation`_ or `container annotation`_, respectively:
 
 .. code-block:: xml
 
     <requirements>
-        <!-- Container based dependency handling -->
-        <container type="docker">busybox:1.36.1-glibc</container>
         <!-- Conda based dependency handling -->
-        <requirement type="package" version="8.22">gnu_coreutils</requirement>
+        <requirement type="package" version="1.20">samtools</requirement>
+        <!-- Container based dependency handling -->
+        <container type="docker">ghcr.io/sokrypton/colabfold:1.5.5-cuda12.2.2</container>
     </requirements>
 
+Most tools, especially those written and maintained by the IUC_, use Conda. The IUC recommends the use of **Conda
+package** requirements for tool wrapper developers because:
 
-This approach has shown two limitations that slowed down the adoption by tool developers.
-First, every tool needs to be annotated with a container name (as shown above) and this container needs
-to be created beforehand, usually manually. The second reason is that a Galaxy tool aims to be deployed everywhere,
-independet of the underlying system, meaning if Docker is not available Galaxy should use Conda packages. 
-This puts an additional burden on tool developers who need to take care of two dependency resolvers. This setup can cause
-different tool results depending on the resolver, because both the Conda package and the Docker container are
-usually not created out of the same recipe and maybe were compiled in a different way, use different sources etc.
+* Most software wrapped into Galaxy tools are already built into Conda packages maintained by robust software packaging
+  communities like Bioconda_ and conda-forge_,
+* Software in Bioconda and conda-forge are automatically built into containers by BioContainers_.
+* If your Galaxy tool depends on more than one Conda package, :ref:`mulled containers <Mulled containers>` - containers
+  with multiple conda requirements - can be easily and automatically be built and hosted for you.
 
-Not an ideal solution and something we wanted to solve.
+Further, the IUC recommends the use of **Apptainer_ or Singularity_** for Galaxy admins as the primary dependency
+resolver, because:
 
-Here we demonstrate a solution that can create Containers out of Conda packages automatically.
-This can be either used to support communities like BioContainers_ to create Containers
-before deploying a Galaxy tool, or this can be used by Galaxy to create Containers on-demand and on-the-fly if one
-is not available already.
+* Docker is typically not supported in HPC environments and is not designed with unprivileged batch-style workloads in
+  mind.
+* Conda does not strictly pin all dependencies, so the likelihood that a specific older package version is installable
+  and usable decreases over time.
+* `Mulled containers` are automatically built for Singularity (and Docker) by Bioconda_ and BioContainers_
 
+Together, these provide a solution that can create containers out of Conda packages automatically, which can
+subsequently be used by Galaxy administrators to fulfill tool dependencies. Additionally, Galaxy can be configured to
+use the same tooling to automatically build containers on-demand and on-the-fly if one matching the requirements is not
+already available.
+
+Configuring Galaxy to use containers for tool dependencies
+----------------------------------------------------------
+
+In most cases, Galaxy administrators do not need to concern themselves with container creation - they can simply make
+use of the infrastructure the Galaxy and Conda communities have created to use existing containers.
+
+TODO: provide a sensible container resolvers config here https://github.com/galaxyproject/galaxy/issues/20105
 
 Automatic build of Linux containers
 -----------------------------------
 
-We utilize mulled_ with involucro_ to automatically convert all packages in Bioconda_ into Linux containers images 
-(Docker and rkt at the moment) and make them available at the `BioContainers Quay.io account`_.
+The full ecosystem for end-to-end package-to-container generation and hosting is an interdependent set of utilities,
+tooling, and sites maintained by the Bioconda_, conda-forge_, BioContainers_, and Galaxy communities. The ability to
+provide and use software as containers in Galaxy is heavily dependent on the `Mulled containers`_ feature of
+BioContainers.
 
-We have developed small utilities around this technology stack, which is currently included in the ``galaxy-tool-util``
-package, which can be installed simply using ``pip install galaxy-tool-util``. Here is a short introduction:
+At a high level:
+
+1. Conda packages are created and added to Bioconda and conda-forge by Pull Request to their respective recipes
+   repositories (`bioconda/bioconda-recipes`_, `conda-forge/staged-recipes`_) on Github.
+2. Upon merge of a Bioconda PR, a Docker container for that package is automatically built in CI using involucro_ and
+   pushed to the `BioContainers Quay.io organization`_.
+3. The `BioContainers multi-package-containers`_ is used to create `Mulled containers` in two ways:
+   1. Manual pull requests to add new combinations/versions of packages, and
+   2. The Galaxy planemo-monitor_ repository CI scans a list of Git repositories containing Galaxy tool wrappers daily,
+      ensures container images for all are available on the BioContainers Quay.io, and submits PRs for any that are
+      missing.
+4. Upon merge to multi-package-containers, a mulled Docker image is built using involucro_ and uploaded to the
+   `BioContainers Quay.io organization`_, converted to Singularity, and uploaded to the `Galaxy Singularity Depot`_.
+5. The `BioContainers singularity-build-bot`_ CI periodically scans the BioContainers Quay.io and converts any missing
+   images that are not present on the Galaxy Singularity Depot to Singularity and uploads them to the Depot.
+6. Singularity images are mirrored hourly from the Depot to CVMFS_ for direct mountability.
+
+The full ecosystem for building and distributing packages and containers is shown in the following diagram:
+
+.. figure:: container_ecosystem.png
+   :alt: Diagram of the container creation and distribution ecosystem described above. Additional details not discussed: 
+
+Mulled containers
+-----------------
+
+"Mulled" containers are BioContainers feature which allow multiple distinct top-level Conda packages to be installed
+into a single container image. Although a Conda environment always contains many installed packages (almost no Conda
+package is entirely self-contained, they all have dependencies), Conda leaves the naming of environments up to the Conda
+end user. In the case of a single package, naming the environment for the package you are installing is sensible, e.g.:
+
+.. code-block:: sh-session
+
+    $ conda create --override-channels --strict-channel-priority --channel conda-forge --channel bioconda \
+        --name samtools:1.21 samtools=1.21
+
+Naturally, Bioconda packages are similarly named (sometimes with a hash[1]_) when built in to BioContainers:
+
+.. code-block:: sh-session
+
+    $ curl -s https://quay.io/api/v1/repository/biocontainers/samtools | jq -cr '.tags | keys' | grep 1.20
+      "1.21--h50ea8bc_0",
+      "1.21--h96c455f_1",
+
+When two or more named packages are to be installed in an environment, choosing a name is less straightforward;
+Galaxy and BioContainers settled on generating a hash of the requested package names and a hash of their versions. This
+provides a stable identifier for any combination of packages and versions.
+
+Thus if installing samtools 1.21 along with bwa 0.7.19, the name hash is::
+
+    fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40
+
+And the version hash is::
+
+    bd996097b6dd518cf788ddd6c586fb23d039cb9c
+
+The name hash is prepended with ``mulled-v2-`` to become mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40_,
+and the version is appended with a build number (``-0``), resulting in the container image with name:tag::
+
+    mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40:bd996097b6dd518cf788ddd6c586fb23d039cb9c-0
+
+This hash is stable, albeit one-way, so determining a container's contents from its name is not straightforward. We have
+developed small utilities for working with mulled containers and the technology stack described above, many of which are
+used by the stack itself. They are currently included in the ``galaxy-tool-util`` Python package.
+
+Working with mulled containers
+------------------------------
+
+The ``galaxy-tool-util`` package can be installed using ``pip``:
+
+.. code-block:: sh-session
+
+    $ python3 -m venv 'galaxy-tool-util[mulled]'
+    $ . ./galaxy/tool-util/bin/activate
+    $ pip install galaxy-tool-util
 
 Search for containers
 ^^^^^^^^^^^^^^^^^^^^^
 
-This will search for Docker containers (in the biocontainers organisation on quay.io), Singularity containers (located at https://depot.galaxyproject.org/singularity/), Conda packages (in the bioconda channel), and GitHub files (on the bioconda-recipes repository. 
+This will search for Docker containers (in the `BioContainers Quay.io organization`_), Singularity containers (in the
+`Galaxy Singularity Depot`_), Conda packages (in the bioconda channel), and GitHub files (on the bioconda-recipes
+repository). 
 
-.. code-block:: bash
+.. code-block:: sh-session
 
-   $ mulled-search --destination docker conda --search vsearch
+   $ mulled-search --destination quay conda --search samtools bwa
 
-The user can specify the location(s) for a search using the ``--destination`` option. The search term is specified using ``--search``. Multiple search terms can be specified simultaneously; in this case, the search will also encompass multi-package containers. For example, ``--search samtools bamtools``, will return ``mulled-v2-0560a8046fc82aa4338588eca29ff18edab2c5aa:c17ce694dd57ab0ac1a2b86bb214e65fedef760e-0``, in addition to all individual samtools and bamtools results.
+The user can specify the location(s) for a search using the ``--destination`` option. The search term is specified using
+``--search``. Multiple search terms can be specified simultaneously; in this case, the search will also encompass
+multi-package containers. For example, ``--search samtools bamtools`` will return all versions of
+``mulled-v2-0560a8046fc82aa4338588eca29ff18edab2c5aa`` in addition to all individual samtools and bamtools results.
 
-If the user wishes to specify a quay.io organization or Conda channel for the search, this may be done using the ``--organization`` and ``--channel`` options respectively, e.g. ``--channel conda-forge``. Enabling ``--json`` causes results to be returned in JSON format.
-
+If the user wishes to specify a quay.io organization or Conda channel for the search, this may be done using the
+``--organization`` and ``--channel`` options respectively, e.g. ``--channel conda-forge``. Enabling ``--json`` causes
+results to be returned in JSON format. Because the quay.io organization is large, results are cached. The amount of time
+the cache will be reused for can be changed with ``--cache-time``.
 
 Calculate a mulled hash
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Each mulled container is identified with a hash such as ``mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e``. You can calculate this hash using the ``mulled-hash`` command, submitting a comma-separated list of package names:
+Each mulled container is identified with a hash such as ``mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e``. You can
+calculate this hash using the ``mulled-hash`` command, submitting a comma-separated list of package names:
 
-.. code-block:: bash
+.. code-block:: sh-session
 
    $ mulled-hash samtools=1.3.1,bedtools=2.22
    mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:d52e471b5bfa168ac813d54fc5dfe7f96ade56e6
 
-The user can specify whether to generate hashes for either version 1 or version 2 containers with ``--hash``; version 2 is the default.
+The user can specify whether to generate hashes for either version 1 or version 2 containers WITH ``--hash``; version 2 is the default.
 
+A web-based hash generator written by `Moritz E. Beber <https://github.com/Midnighter>` can be found at
+https://midnighter.github.io/mulled
 
 Build all packages from bioconda from the last 24h
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The BioConda community is building a container for every package they create with a command similar to this.
+The Bioconda community builds a container for every package they create with a command similar to this:
 
-.. code-block:: bash
+.. code-block:: sh-session
 
    $ mulled-build-channel --channel bioconda --namespace biocontainers \
       --involucro-path ./involucro --recipes-dir ./bioconda-recipes --diff-hours 25 build
-
 
 Building Docker containers for local Conda packages
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -175,10 +267,27 @@ The generated containers should also be tested. This can be achieved by affixing
 
    $ mulled-update-singularity-containers --container-list list.txt --filepath /tmp/sing/ --installation /usr/local/bin/singularity --testing test-output.log
 
-.. _IUC: https://galaxyproject.org/iuc/
-.. _container annotation:  https://github.com/galaxyproject/galaxy/blob/dev/test/functional/tools/catDocker.xml#L4
-.. _BioContainers: https://github.com/biocontainers
-.. _mulled: https://github.com/mulled/mulled
-.. _involucro: https://github.com/involucro/involucro
+.. _Conda: https://conda.org/
+.. _Docker: https://www.docker.com/
+.. _requirement annotation: https://docs.galaxyproject.org/en/latest/dev/schema.html#tool-requirements-requirement
+.. _container annotation: https://docs.galaxyproject.org/en/latest/dev/schema.html#tool-requirements-container
 .. _Bioconda: https://bioconda.github.io/
-.. _BioContainers Quay.io account: https://quay.io/organization/biocontainers
+.. _conda-forge: https://conda-forge.org/
+.. _IUC: https://galaxyproject.org/iuc/
+.. _BioContainers: https://github.com/biocontainers
+.. _BioContainers multi-package-containers: https://github.com/BioContainers/multi-package-containers
+.. _BioContainers singularity-build-bot: https://github.com/BioContainers/singularity-build-bot
+.. _bioconda/bioconda-recipes: https://github.com/bioconda/bioconda-recipes
+.. _conda-forge/staged-recipes: https://github.com/conda-forge/staged-recipes
+.. _planemo-monitor: https://github.com/galaxyproject/planemo-monitor
+.. _Apptainer: https://apptainer.org/
+.. _Singularity: https://sylabs.io/singularity/
+.. _involucro: https://github.com/involucro/involucro
+.. _BioContainers Quay.io organization: https://quay.io/organization/biocontainers
+.. _Galaxy Singularity Depot: https://depot.galaxyproject.org/singularity
+.. _CVMFS: https://cernvm.cern.ch/fs/
+.. _Bioconda build number standard: https://bioconda.github.io/faqs.html#what-s-the-difference-between-a-build-number-and-a-package-version
+.. _mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40: https://quay.io/repository/biocontainers/mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40
+
+.. [1] The hash is an artifact of the `Bioconda build number standard`_, Conda has separate fields for version and build
+   number, whereas Docker only has the tag, where BioContainers combines both version number and build number.

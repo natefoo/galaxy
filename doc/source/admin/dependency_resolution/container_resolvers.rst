@@ -1,8 +1,14 @@
 .. _container_resolvers:
 
 
-Containers in Galaxy
-====================
+Container Resolvers in Galaxy
+=============================
+
+.. important::
+
+   There are two systems in Galaxy for resolving a tool's dependencies: container resolvers (this page) and
+   :doc:`dependency resolvers <dependency_resolvers>`. By default, Galaxy uses dependency resolvers (no containers). It
+   is possible to use both simultaneously, but they are configured separately.
 
 Galaxy can run tools inside containers using ``docker`` or ``singularity``.
 The containers can be either explicit or mulled (also called multi package containers).
@@ -27,8 +33,8 @@ container registry.
    `planemo monitor <https://github.com/galaxyproject/planemo-monitor>`_ repository
    (which includes for instance tools-iuc and several other tool repositories).
 
-Container Resolvers in Galaxy
------------------------------
+Container Resolvers
+-------------------
 
 A container resolver tries to get a container description, i.e. the information
 (URI/path to the container image, ...) that is needed to execute a tool in a
