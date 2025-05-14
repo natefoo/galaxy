@@ -1,6 +1,9 @@
 from social_core.backends.oauth import BaseOAuth2
 from social_core.utils import handle_http_errors
 
+import logging
+log = logging.getLogger(__name__)
+
 
 class TapisOAuth2(BaseOAuth2):
     name = "tapis"
@@ -30,8 +33,8 @@ class TapisOAuth2(BaseOAuth2):
     RESPONSE_TYPE = "code"
     USE_BASIC_AUTH = True
 
+    # Upstream this is initialized to None, but it is expected this will be a list of tuples
     EXTRA_DATA = [
-        ("expires_in", "expires_in"),
         ("refresh_token", "refresh_token"),
     ]
 
@@ -56,11 +59,23 @@ class TapisOAuth2(BaseOAuth2):
         This uses the access token to retrieve the user's profile information
         from the Tapis API endpoint.
         """
+        log.debug(f"user_data: access_token type: {type(access_token)}")
+        log.debug(f"user_data: access_token value: {access_token}")
+
         # Set up the authorization header with the access token
-        headers = {"X-Tapis-Token": f"{access_token.get('access_token', '')}"}
+        token_value = access_token
+        if isinstance(access_token, dict):
+            token_value = access_token.get("access_token", "")
+            log.debug(f"user_data: Found dictionary, extracted token: {token_value}")
+        else:
+            log.debug(f"user_data: Using token directly: {token_value}")
+
+        headers = {"X-Tapis-Token": token_value}
+        log.debug(f"user_data: Headers for request: {headers}")
 
         # Make the request to the profile endpoint
         response = self.get_json(self.USERINFO_URL, headers=headers)
+        log.debug(f"user_data: API response type: {type(response)}")
 
         # If the response is in a nested structure, extract the user data
         # This may need adjustment based on the actual Tapis API response structure
@@ -74,43 +89,61 @@ class TapisOAuth2(BaseOAuth2):
     @handle_http_errors
     def auth_complete(self, *args, **kwargs):
         """Completes login process, must return user instance"""
+        log.debug("auth_complete: Starting authentication completion")
         self.process_error(self.data)
         state = self.validate_state()
-        data, params = None, None
-        if self.ACCESS_TOKEN_METHOD == "GET":
-            params = self.auth_complete_params(state)
-        else:
-            data = self.auth_complete_params(state)
+
+        data = self.auth_complete_params(state)
+        log.debug(f"auth_complete: Auth params: {data}")
 
         response = self.request_access_token(
             self.access_token_url(),
             data=data,
-            params=params,
+            params=None,
             headers=self.auth_headers(),
             auth=self.auth_complete_credentials(),
             method=self.ACCESS_TOKEN_METHOD,
         )
+        log.debug(f"auth_complete: Access token response type: {type(response)}")
         self.process_error(response)
+        log.debug(f"auth_complete: Full response: {response}")
         result = response.get("result")
+        if not result:
+            raise ValueError("No result found in Tapis authentication response")
+        log.debug(f"auth_complete: Result structure: {result}")
         token = result.get("access_token")
-        return self.do_auth(token, response=response, *args, **kwargs)
+        if not token:
+            raise ValueError("No access token found in Tapis authentication response")
+        log.debug(f"auth_complete: Token type: {type(token)}, Value: {token}")
+        # ignore B026, we keep the same signature as the base class
+        log.debug(f"auth_complete: Calling do_auth with token type: {type(token)}")
+        return self.do_auth(token, response=response, *args, **kwargs)  # noqa: B026
 
     def restructure_response(self, response):
+        log.debug(f"restructure_response: Original response structure: {response}")
         # For compatibility we pull several keys up to the top to match the expected payload
         if "access_token" in response.get("result", {}).get("access_token", {}):
             response["access_token"] = response["result"]["access_token"]["access_token"]
+            log.debug(f"restructure_response: Extracted access_token: {response['access_token']}")
 
         if "id_token" in response.get("result", {}).get("access_token", {}):
             response["id_token"] = response["result"]["access_token"]["id_token"]
+            log.debug(f"restructure_response: Extracted id_token: {response['id_token']}")
 
         if "refresh_token" in response.get("result", {}):
             response["refresh_token"] = response["result"]["refresh_token"]
+            log.debug(f"restructure_response: Extracted refresh_token: {response['refresh_token']}")
+
+        log.debug(f"restructure_response: Final response structure: {response}")
         return response
 
     @handle_http_errors
     def do_auth(self, access_token, *args, **kwargs):
         """Finish the auth process once the access_token was retrieved"""
+        log.debug(f"do_auth: Received access_token type: {type(access_token)}")
+        log.debug(f"do_auth: Access token value: {access_token}")
         data = self.user_data(access_token, *args, **kwargs)
+        log.debug(f"do_auth: user_data returned: {data}")
         response = kwargs.get("response") or {}
         response.update(data or {})
         # Restructure response to pop access_token, id_token, and refresh_token up.
