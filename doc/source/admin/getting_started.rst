@@ -11,8 +11,8 @@ Galaxy's core functionality is currently supported on Python **3.9 or newer**. Y
 
 .. code-block:: sh-session
 
-    $ python -V
-    Python 3.11.2
+    $ python3 -V
+    Python 3.13.3
 
 The Galaxy server is supported on Linux, macOS, and Windows Subsystem for Linux (WSL) for development. Production
 Galaxy servers are strongly encouraged to run on Linux only.
@@ -27,19 +27,12 @@ A simple Galaxy server for testing and local use can be installed and started wi
 
 .. code-block:: sh-session
 
-    $ python -m venv galaxy
+    $ python3 -m venv galaxy
     $ . ./galaxy/bin/activate
     $ pip install galaxy
-    $ galaxy-web
+    $ galaxy --single-user
 
 Once startup is complete, Galaxy should be available in your browser at http://localhost:8080
-
-A more complete server with Celery_ can be started once you create a Galaxy configuration file:
-
-.. code-block:: sh-session
-
-    $ galaxy-config
-    $ galaxy -c galaxy.yml
 
 Installing Galaxy for Production
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -57,5 +50,4 @@ be started with:
     $ git clone https://github.com/galaxyproject/galaxy.git
     $ sh run.sh
 
-.. _Celery: https://docs.celeryq.dev/
 .. _GetGalaxy.org: https://getgalaxy.org/
