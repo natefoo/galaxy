@@ -432,7 +432,7 @@ def _replace_file(args: Namespace, f: StringIO, app_desc: App, from_path: str, t
         shutil.move(from_path, backup_path)
 
 
-def _build_sample_yaml(args: Namespace, app_desc: App) -> None:
+def _build_yaml_common(args: Namespace, app_desc: App) -> StringIO:
     schema = app_desc.schema
     f = StringIO()
     if description := getattr(schema, "description", None):
@@ -443,8 +443,20 @@ def _build_sample_yaml(args: Namespace, app_desc: App) -> None:
         if settings_to_sample is None:
             raise Exception("Please install gravity to rebuild the sample config")
         f.write(settings_to_sample())
-    _write_sample_section(args, f, app_desc.app_name, schema)
+    return f
+
+
+def _build_sample_yaml(args: Namespace, app_desc: App) -> None:
+    f = _build_yaml_common(args, app_desc)
+    _write_commented_section(args, f, app_desc.app_name, app_desc.schema)
     destination = os.path.join(args.galaxy_root, app_desc.sample_destination)
+    _write_to_file(args, f, destination)
+
+
+def build_yaml(args: Namespace, app_name: str, destination: str, config_dict: dict[str, Any]) -> None:
+    app_desc = APPS[app_name]
+    f = _build_yaml_common(args, app_desc)
+    _write_commented_section(args, f, app_desc.app_name, app_desc.schema, config_dict=config_dict)
     _write_to_file(args, f, destination)
 
 
@@ -469,14 +481,21 @@ def _order_load_path(path: str) -> dict[str, Any]:
         return raw_config
 
 
-def _write_sample_section(args: Namespace, f: StringIO, section_header: str, schema: AppSchema) -> None:
+def _write_commented_section(
+    args: Namespace, f: StringIO, section_header: str, schema: AppSchema, config_dict: Optional[dict[str, Any]] = None
+) -> None:
     _write_header(f, section_header)
     for key, value in schema.app_schema.items():
         default = None if "default" not in value else value["default"]
         option = schema.get_app_option(key)
+        as_comment = True
+        if config_dict is not None:
+            config_value = config_dict.get(key)
+            as_comment = config_value is None
+            default = config_value or default
         option_value = OptionValue(key, default, option)
         key = option.get("key", key)
-        _write_option(args, f, key, option_value, as_comment=True)
+        _write_option(args, f, key, option_value, as_comment=as_comment)
 
 
 def _write_section(args: Namespace, f: StringIO, section_header: str, section_dict: dict[str, OptionValue]) -> None:

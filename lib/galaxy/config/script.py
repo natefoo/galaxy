@@ -5,6 +5,8 @@ import string
 import sys
 from argparse import ArgumentParser
 
+from galaxy.config.config_manage import build_yaml
+
 CONFIGURE_URL = "https://docs.galaxyproject.org/en/master/admin/"
 
 DESCRIPTION = "Initialize a directory with a minimal Galaxy config."
@@ -53,12 +55,9 @@ Start Galaxy by running the command:
 galaxy -c {config_path}
 """
 
-# The sample is used as the default config file for Galaxy started without a config, and we don't want to duplicate the
-# whole thing into galaxy.config for templating, so for now just substitute some lines. In the future we will build
-# configs differently.
+# The Galaxy config is generated from the schema, but the gravity section is populated by Gravity's settings_to_sample()
+# and so has to be overriden the old-fashioned way
 GALAXY_CONFIG_SUBSTITUTIONS = {
-    "  #config_dir: null": "  config_dir: ${config_dir}",
-    "  #data_dir: null": "  data_dir: ${data_dir}",
     "    # bind: localhost:8080": "    bind: ${host}:${port}",
 }
 
@@ -72,6 +71,8 @@ def main(argv=None):
     arg_parser.add_argument("--db-conn", help=HELP_DB_CONN)
     arg_parser.add_argument("--force", action="store_true", default=False, help=HELP_FORCE)
     args = arg_parser.parse_args(argv)
+    args.add_comments = True
+    args.dry_run = False
     config_dir = args.config_dir
     relative_config_dir = config_dir
     config_dir = os.path.abspath(config_dir)
@@ -79,8 +80,6 @@ def main(argv=None):
     data_dir = os.path.abspath(data_dir)
 
     mode = _determine_mode(args)
-    if args.db_conn:
-        GALAXY_CONFIG_SUBSTITUTIONS["  #database_connection: null"] = "  database_connection: ${database_connection}"
 
     for directory in (config_dir, data_dir):
         if not os.path.exists(directory):
@@ -131,15 +130,15 @@ def _handle_galaxy_yml(args, config_dir, data_dir):
     yml_file = _determine_yml_file(config_dir)
     _check_file(yml_file, force)
     config_dict = dict(
-        port=args.port,
-        host=_determine_host(args),
         config_dir=config_dir,
         data_dir=data_dir,
         database_connection=args.db_conn,
     )
 
+    build_yaml(args, "galaxy", yml_file, config_dict)
+
     galaxy_config_template = []
-    with open(GALAXY_CONFIG_TEMPLATE_FILE) as fh:
+    with open(yml_file) as fh:
         for line in fh:
             line = line.rstrip("\n")
             for k, v in GALAXY_CONFIG_SUBSTITUTIONS.items():
@@ -147,8 +146,7 @@ def _handle_galaxy_yml(args, config_dir, data_dir):
                     line = v
             galaxy_config_template.append(line)
     galaxy_config_template = string.Template("\n".join(galaxy_config_template))
-
-    galaxy_config = galaxy_config_template.safe_substitute(**config_dict)
+    galaxy_config = galaxy_config_template.safe_substitute({"host": _determine_host(args), "port": args.port})
     open(yml_file, "w").write(galaxy_config)
 
 
