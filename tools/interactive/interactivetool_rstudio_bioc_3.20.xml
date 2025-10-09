@@ -38,7 +38,8 @@
         mkdir -p /import &&
         chown rstudio:rstudio /import &&
         ln -s "/import" /home/rstudio/galaxy_imports &&
-        mkdir -p ./rstudio_outputs && chown rstudio:rstudio ./rstudio_outputs && ln -s "\$PWD/rstudio_outputs" /home/rstudio/galaxy_outputs &&
+        ## mkdir -p ./rstudio_outputs && chown rstudio:rstudio ./rstudio_outputs && ln -s "\$PWD/rstudio_outputs" /home/rstudio/galaxy_outputs &&
+        setpriv --reuid="\$USERID" --regid="\$GROUPID" --clear-groups -- mkdir -p ./rstudio_outputs && ln -s "\$PWD/rstudio_outputs" /home/rstudio/galaxy_outputs &&
 
         echo "[`date`] - Creating Rprofile" &&
         cp '$__tool_directory__/Rprofile.R' /home/rstudio/.Rprofile &&
