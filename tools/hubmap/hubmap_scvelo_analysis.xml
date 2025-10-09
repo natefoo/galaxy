@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tool id="hubmap_scvelo_analysis" name="HuBMAP scVelo Analysis" version="1.0.0" profile="24.2">
+    <description>Perform RNA velocity analysis with scVelo</description>
+    <requirements>
+        <container type="docker">hubmap/scrna-analysis:latest</container>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+working="\$(pwd)" &&
+export NUMBA_CACHE_DIR="\${TMPDIR:-/tmp}/numba_cache" &&
+mkdir "\$NUMBA_CACHE_DIR" &&
+export MPLCONFIGDIR="\${TMPDIR:-/tmp}/mpl" &&
+mkdir "\$MPLCONFIGDIR" &&
+/opt/scvelo_analysis.py "$spliced_h5ad_file" "$assay"  &&
+mv "\${working}/scvelo_annotated.h5ad" "$annotated_h5ad_file" &&
+mv "\${working}/scvelo_embedding_grid.pdf" "$embedding_grid_plot"
+    ]]></command>
+    <inputs>
+        <param name="assay" type="select" label="Assay">
+            <option value="10x_v2">10x Chromium v2</option>
+            <option value="10x_v3">10x Chromium v3</option>
+            <option value="10x_v2_sn">10x Chromium v2 nuclei</option>
+            <option value="10x_v3_sn">10x Chromium v3 nuclei</option>
+            <option value="snareseq">SNARE-seq</option>
+            <option value="sciseq">sci-RNA-seq</option>
+            <option value="slideseq">Slide-seq</option>
+            <option value="visium-ff">Visium FF</option>
+            <option value="multiome_10x">10x Multiome</option>
+            <option value="xenium">Xenium</option>
+            <option value="cosmx">CosMx</option>
+        </param>
+        <param name="spliced_h5ad_file" type="data" format="h5ad" label="scanpy_analysis/filtered_data_h5ad"/>
+    </inputs>
+    <outputs>
+        <data name="annotated_h5ad_file" format="h5ad" from_work_dir="scvelo_annotated.h5ad" label="scVelo annotated AnnData" optional="true"/>
+        <data name="embedding_grid_plot" format="pdf" from_work_dir="scvelo_embedding_grid.pdf" label="RNA velocity embedding" optional="true"/>
+    </outputs>
+    <help><![CDATA[
+Runs the scVelo workflow to compute RNA velocity and generate embedding plots for single-cell data.
+    ]]></help>
+</tool>

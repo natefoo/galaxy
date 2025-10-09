@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tool id="hubmap_salmon_human" name="HuBMAP Salmon Alevin (human)" version="1.0.0" profile="24.2">
+    <description>Quantify scRNA-seq reads with Salmon Alevin using the GRCh38 index</description>
+    <requirements>
+        <container type="docker">hubmap/salmon-grch38:latest</container>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+working="\$(pwd)" &&
+ln -s "$orig_R1_fastq" "\${working}/orig_R1.fastq.gz" &&
+ln -s "$orig_R2_fastq" "\${working}/orig_R2.fastq.gz" &&
+/opt/salmon_wrapper.py "$assay" "\${working}" "\${working}" -p \${GALAXY_SLOTS:-1} &&
+tar -C "\${working}" -cvf "./salmon_out.tar" "./salmon_out" &&
+mv "\${working}/salmon_out.tar" "$salmon_output"
+    ]]></command>
+    <inputs>
+        <param name="assay" type="select" label="Assay">
+            <option value="10x_v2">10x Chromium v2</option>
+            <option value="10x_v3">10x Chromium v3</option>
+            <option value="10x_v2_sn">10x Chromium v2 nuclei</option>
+            <option value="10x_v3_sn">10x Chromium v3 nuclei</option>
+            <option value="snareseq">SNARE-seq</option>
+            <option value="sciseq">sci-RNA-seq</option>
+            <option value="slideseq">Slide-seq</option>
+            <option value="visium-ff">Visium FF</option>
+            <option value="multiome_10x">10x Multiome</option>
+            <option value="xenium">Xenium</option>
+            <option value="cosmx">CosMx</option>
+        </param>
+        <param name="trim_R1_fastq" format="fastq.gz" type="data" label="Trimmed R1 FASTQ file" />
+        <param name="trim_R2_fastq" format="fastq.gz" type="data" label="Trimmed R2 FASTQ file" />
+        <param name="orig_R1_fastq" format="fastq.gz" type="data" label="Original R1 FASTQ file" />
+        <param name="orig_R2_fastq" format="fastq.gz" type="data" label="Original R2 FASTQ file" />
+        <param name="expected_cell_count" type="integer" optional="true" label="Expected cell count"/>
+        <param name="keep_all_barcodes" type="boolean" truevalue="true" falsevalue="false" checked="false" label="Keep all barcodes"/>
+    </inputs>
+    <outputs>
+        <data name="salmon_output" format="tar" label="Salmon output"/>
+    </outputs>
+    <help><![CDATA[
+Runs Salmon Alevin with the GRCh38 reference index inside the HuBMAP container.
+    ]]></help>
+</tool>

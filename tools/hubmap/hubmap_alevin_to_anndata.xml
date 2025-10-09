@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tool id="hubmap_alevin_to_anndata" name="HuBMAP Alevin to AnnData" version="1.0.0" profile="24.2">
+    <description>Convert Salmon Alevin output into AnnData matrices</description>
+    <requirements>
+        <container type="docker">hubmap/scrna-analysis:latest</container>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+working="\$(pwd)" &&
+tar -xmf "$salmon_tar" -C "\${working}" &&
+/opt/alevin_to_anndata.py "$assay" "\${working}/salmon_out" &&
+mv "\${working}/raw_expr.h5ad" "$raw_expr_h5ad" &&
+mv "\${working}/expr.h5ad" "$expr_h5ad" &&
+mv "\${working}/genome_build.json" "$genome_build_json"
+]]></command>
+    <inputs>
+        <param name="assay" type="select" label="Assay">
+            <option value="10x_v2">10x Chromium v2</option>
+            <option value="10x_v3">10x Chromium v3</option>
+            <option value="10x_v2_sn">10x Chromium v2 nuclei</option>
+            <option value="10x_v3_sn">10x Chromium v3 nuclei</option>
+            <option value="snareseq">SNARE-seq</option>
+            <option value="sciseq">sci-RNA-seq</option>
+            <option value="slideseq">Slide-seq</option>
+            <option value="visium-ff">Visium FF</option>
+            <option value="multiome_10x">10x Multiome</option>
+            <option value="xenium">Xenium</option>
+            <option value="cosmx">CosMx</option>
+        </param>
+        <param name="salmon_tar" type="data" format="tar" label="Salmon Alevin output tar"/>
+        <param name="organism" type="text" optional="true" label="Organism"/>
+    </inputs>
+    <outputs>
+        <data name="expr_h5ad" format="h5ad" label="Expression matrix (AnnData)"/>
+        <data name="raw_expr_h5ad" format="h5ad" label="Raw expression matrix" optional="true"/>
+        <data name="genome_build_json" format="json" label="Genome build metadata"/>
+    </outputs>
+    <help><![CDATA[
+Transforms Salmon Alevin output into AnnData-formatted matrices and genome build metadata.
+    ]]></help>
+</tool>

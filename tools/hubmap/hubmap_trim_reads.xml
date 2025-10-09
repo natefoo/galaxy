@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tool id="hubmap_trim_reads" name="HuBMAP Trim Reads" version="1.0.0" profile="24.2">
+    <description>Trim single-cell FASTQ reads with assay-specific settings</description>
+    <requirements>
+        <container type="docker">hubmap/scrna-trim-reads:latest</container>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+working="\$(pwd)" &&
+mkdir "\${working}/trim/" &&
+mkdir "\${working}/adj/" &&
+ln -s "$orig_R1_fastq" "\${working}/trim/Sample_X_S1_L001_R1_001.fastq.gz" &&
+ln -s "$orig_R2_fastq" "\${working}/trim/Sample_X_S1_L001_R2_001.fastq.gz" && 
+python3 /opt/trim_reads.py ${assay} ./adj/ ./trim/ -p \${GALAXY_SLOTS:-1} &&
+mv "\${working}/trimmed/1/Sample_X_S1_L001_R1_001.fastq.gz" "$trim_R1_fastq" &&
+mv "\${working}/trimmed/1/Sample_X_S1_L001_R2_001.fastq.gz" "$trim_R2_fastq"
+    ]]></command>
+    <inputs>
+        <param name="assay" type="select" label="Assay">
+            <option value="10x_v2">10x Chromium v2</option>
+            <option value="10x_v3">10x Chromium v3</option>
+            <option value="10x_v2_sn">10x Chromium v2 nuclei</option>
+            <option value="10x_v3_sn">10x Chromium v3 nuclei</option>
+            <option value="snareseq">SNARE-seq</option>
+            <option value="sciseq">sci-RNA-seq</option>
+            <option value="slideseq">Slide-seq</option>
+            <option value="visium-ff">Visium FF</option>
+            <option value="multiome_10x">10x Multiome</option>
+            <option value="xenium">Xenium</option>
+            <option value="cosmx">CosMx</option>
+        </param>
+        <param name="orig_R1_fastq" format="fastq.gz" type="data" label="Original R1 FASTQ file" />
+        <param name="orig_R2_fastq" format="fastq.gz" type="data" label="Original R2 FASTQ file" />
+    </inputs>
+    <outputs>
+        <data name="trim_R1_fastq" format="fastq.gz" label="Trimmed R1 FASTQ file" />
+        <data name="trim_R2_fastq" format="fastq.gz" label="Trimmed R2 FASTQ file" />
+    </outputs>
+    <help><![CDATA[
+Runs the HuBMAP trimming script to prepare FASTQ pairs for quantification.
+    ]]></help>
+</tool>

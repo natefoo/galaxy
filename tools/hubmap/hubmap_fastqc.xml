@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tool id="hubmap_scrna_fastqc" name="HuBMAP scRNA FastQC" version="1.0.0" profile="24.2">
+    <description>Run FastQC on FASTQ collections using the HuBMAP analysis container</description>
+    <requirements>
+        <container type="docker">hubmap/scrna-analysis:latest</container>
+    </requirements>
+<command detect_errors="exit_code"><![CDATA[ 
+working="\$(pwd)" && 
+input_basename="\$(basename ${fastq.file_name})" && 
+ln -s "$fastq" "\${working}/\${input_basename}.fastq.gz" && 
+python3 /opt/fastqc_wrapper.py "\${working}" \${GALAXY_SLOTS:-1} && 
+html_file="\$(find "\${working}" -type f -name "*.html" -print -quit)" && 
+zip_file="\$(find "\${working}" -type f -name "*.zip" -print -quit)" && 
+mv "\$html_file" "$fastqc_html" && 
+mv "\$zip_file" "$fastqc_zip" 
+]]></command>
+    <inputs>
+        <param name="fastq" format="fastq.gz" type="data" label="FASTQ file" />
+    </inputs>
+    <outputs>
+        <data name="fastqc_html" format="html" label="FastQC HTML report"/>
+        <data name="fastqc_zip" format="zip" label="FastQC data archive"/>
+    </outputs>
+    <help><![CDATA[
+This tool executes the HuBMAP FastQC wrapper inside the `hubmap/scrna-analysis` Docker container.
+It accepts a collection of FASTQ inputs and produces a compressed archive containing the full FastQC output directory.
+    ]]></help>
+</tool>

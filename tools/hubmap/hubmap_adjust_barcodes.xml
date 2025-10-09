@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tool id="hubmap_adjust_barcodes" name="HuBMAP Adjust Barcodes" version="1.0.0" profile="24.2">
+    <description>Assay-specific adjustment of single-cell barcodes</description>
+    <requirements>
+        <container type="docker">hubmap/scrna-barcode-adj:latest</container>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+working="\$(pwd)" &&
+mkdir "\${working}/adj/" &&
+ln -s "$orig_R1_fastq" "\${working}/adj/Sample_X_S1_L001_R1_001.fastq.gz" &&
+ln -s "$orig_R2_fastq" "\${working}/adj/Sample_X_S1_L001_R2_001.fastq.gz" &&
+/opt/adjust_barcodes.py "$assay" ./adj/ &&
+mv "\${working}/adj/Sample_X_S1_L001_R1_001.fastq.gz" "$adj_R1_fastq" &&
+mv "\${working}/adj/Sample_X_S1_L001_R2_001.fastq.gz" "$adj_R2_fastq"
+    ]]></command>
+    <inputs>
+        <param name="assay" type="select" label="Assay">
+            <option value="10x_v2">10x Chromium v2</option>
+            <option value="10x_v3">10x Chromium v3</option>
+            <option value="10x_v2_sn">10x Chromium v2 nuclei</option>
+            <option value="10x_v3_sn">10x Chromium v3 nuclei</option>
+            <option value="snareseq">SNARE-seq</option>
+            <option value="sciseq">sci-RNA-seq</option>
+            <option value="slideseq">Slide-seq</option>
+            <option value="visium-ff">Visium FF</option>
+            <option value="multiome_10x">10x Multiome</option>
+            <option value="xenium">Xenium</option>
+            <option value="cosmx">CosMx</option>
+        </param>
+        <param name="orig_R1_fastq" format="fastq.gz" type="data" label="Original R1 FASTQ file" />
+        <param name="orig_R2_fastq" format="fastq.gz" type="data" label="Original R2 FASTQ file" />
+    </inputs>
+    <outputs>
+        <data name="adj_R1_fastq" format="fastq.gz" label="adjust R1 FASTQ file" />
+        <data name="adj_R2_fastq" format="fastq.gz" label="adjust R2 FASTQ file" />
+        <data name="metadata_json" format="json" from_work_dir="metadata.json" label="Barcode metadata" optional="true"/>
+    </outputs>
+    <configfiles/>
+    <help><![CDATA[
+Runs the HuBMAP barcode adjustment script for assays that require additional processing of raw FASTQ directories.
+    ]]></help>
+</tool>
