@@ -102,23 +102,19 @@ class GoogleCloudStorageFilesSource(PyFilesystem2FilesSource):
 
             # Collect directories (prefixes) and files (blobs)
             entries: List[AnyRemoteEntry] = []
+            file_names = set()  # Track file names to avoid directory/file conflicts
 
-            # First iterator: Get directories from prefixes
-            page_iterator_dirs = bucket.list_blobs(prefix=prefix, delimiter=delimiter)
-            for page in page_iterator_dirs.pages:
-                for dir_prefix in page.prefixes:
-                    # Remove the parent prefix and trailing slash to get just the dir name
-                    dir_name = dir_prefix[len(prefix) :].rstrip("/")
-                    if dir_name:
-                        full_path = os.path.join("/", normalized_path, dir_name) if normalized_path else f"/{dir_name}"
-                        uri = self.uri_from_path(full_path)
-                        entries.append(RemoteDirectory(name=dir_name, uri=uri, path=full_path))
+            # Get all blobs and separate them into files and directory markers
+            all_blobs = list(bucket.list_blobs(prefix=prefix, delimiter=delimiter))
+            directory_markers = set()  # Track directory marker paths
 
-            # Second iterator: Get files from blobs
-            page_iterator_files = bucket.list_blobs(prefix=prefix, delimiter=delimiter)
-            for blob in page_iterator_files:
-                # Skip directory marker objects (empty blobs ending with /)
+            for blob in all_blobs:
+                # Check if this is a directory marker object (empty blob ending with /)
                 if blob.name.endswith("/"):
+                    # Track the directory name without trailing slash
+                    marker_name = blob.name[len(prefix) :].rstrip("/")
+                    if marker_name:
+                        directory_markers.add(marker_name)
                     continue
 
                 # Get just the filename (remove prefix)
@@ -133,13 +129,40 @@ class GoogleCloudStorageFilesSource(PyFilesystem2FilesSource):
                         ctime = blob.time_created.isoformat()
 
                     entries.append(
-                        RemoteFile(name=file_name, size=blob.size or 0, ctime=ctime, uri=uri, path=full_path)
+                        RemoteFile(
+                            name=file_name,
+                            size=blob.size or 0,
+                            ctime=ctime,
+                            uri=uri,
+                            path=full_path,
+                            **{"class": "File"},
+                        )
                     )
+                    file_names.add(file_name)
+
+            # Get directories from prefixes, but skip if:
+            # - A file with same name exists
+            # - It's just a directory marker (empty blob ending with /)
+            page_iterator_dirs = bucket.list_blobs(prefix=prefix, delimiter=delimiter)
+            for page in page_iterator_dirs.pages:
+                for dir_prefix in page.prefixes:
+                    # Remove the parent prefix and trailing slash to get just the dir name
+                    dir_name = dir_prefix[len(prefix) :].rstrip("/")
+                    # Skip if file with same name exists OR it's just a directory marker
+                    if dir_name and dir_name not in file_names and dir_name not in directory_markers:
+                        full_path = os.path.join("/", normalized_path, dir_name) if normalized_path else f"/{dir_name}"
+                        uri = self.uri_from_path(full_path)
+                        entries.append(
+                            RemoteDirectory(name=dir_name, uri=uri, path=full_path, **{"class": "Directory"})
+                        )
+
+            # Sort entries to put directories first, then files
+            entries.sort(key=lambda e: (e.get("class") != "Directory", e["name"]))
 
             # Apply query filter if provided
             if query:
                 query_lower = query.lower()
-                entries = [e for e in entries if query_lower in e.name.lower()]
+                entries = [e for e in entries if query_lower in e["name"].lower()]
 
             # Get total count before pagination
             total_count = len(entries)
