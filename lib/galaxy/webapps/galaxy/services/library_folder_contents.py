@@ -17,11 +17,11 @@ from galaxy.schema.fields import LibraryFolderDatabaseIdField
 from galaxy.schema.schema import (
     AnyLibraryFolderItem,
     CreateLibraryFilePayload,
+    ExtendedLibraryFolderMetadata,
     FileLibraryFolderItem,
     FolderLibraryFolderItem,
     LibraryFolderContentsIndexQueryPayload,
     LibraryFolderContentsIndexResult,
-    LibraryFolderMetadata,
 )
 from galaxy.security.idencoding import IdEncodingHelper
 from galaxy.webapps.base.controller import UsesLibraryMixinItems
@@ -83,8 +83,42 @@ class LibraryFolderContentsService(ServiceBase, UsesLibraryMixinItems):
                     self._serialize_library_dataset(trans, current_user_roles, tag_manager, content_item)
                 )
 
-        metadata = self._serialize_library_folder_metadata(trans, folder, user_permissions, total_rows)
-        return LibraryFolderContentsIndexResult(metadata=metadata, folder_contents=folder_contents)
+        # Find and load README - query directly for README files to avoid pagination issues
+        readme_raw = None
+        README_FILENAMES = {"readme.md", "readme.markdown", "readme.txt", "readme"}
+
+        # Query for README file in folder (independent of pagination)
+        from sqlalchemy import (
+            func,
+            select,
+        )
+
+        readme_stmt = (
+            select(model.LibraryDataset)
+            .where(model.LibraryDataset.folder_id == folder.id)
+            .where(model.LibraryDataset.deleted.is_(False))
+            .where(func.lower(func.trim(model.LibraryDataset._name)).in_(README_FILENAMES))
+            .limit(1)
+        )
+        readme_dataset = trans.sa_session.scalars(readme_stmt).first()
+
+        if readme_dataset:
+            ldda = readme_dataset.library_dataset_dataset_association
+            if ldda and ldda.dataset and ldda.dataset.has_data():
+                if ldda.extension in {"txt", "md", "markdown"}:
+                    try:
+                        with open(ldda.dataset.get_file_name(), "r", encoding="utf-8") as f:
+                            readme_raw = f.read()
+                    except Exception as e:
+                        log.warning(f"Could not render README for folder {folder_id}: {e}")
+
+        base_metadata = self._serialize_library_folder_metadata(
+            trans, folder, user_permissions, total_rows, readme_raw=readme_raw
+        )
+        return LibraryFolderContentsIndexResult(
+            metadata=base_metadata,
+            folder_contents=folder_contents,
+        )
 
     def create(
         self,
@@ -210,10 +244,11 @@ class LibraryFolderContentsService(ServiceBase, UsesLibraryMixinItems):
         folder: model.LibraryFolder,
         user_permissions: UserFolderPermissions,
         total_rows: int,
-    ) -> LibraryFolderMetadata:
+        readme_raw: str | None,
+    ) -> ExtendedLibraryFolderMetadata:
         full_path = self.folder_manager.build_folder_path(trans.sa_session, folder)
         parent_library_id = folder.parent_library.id if folder.parent_library else None
-        metadata = LibraryFolderMetadata(
+        metadata = ExtendedLibraryFolderMetadata(
             full_path=full_path,
             total_rows=total_rows,
             can_add_library_item=user_permissions.add,
@@ -221,5 +256,6 @@ class LibraryFolderContentsService(ServiceBase, UsesLibraryMixinItems):
             folder_name=folder.name,
             folder_description=folder.description,
             parent_library_id=parent_library_id,
+            readme_raw=readme_raw,
         )
         return metadata

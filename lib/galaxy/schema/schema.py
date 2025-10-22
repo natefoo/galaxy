@@ -3279,12 +3279,15 @@ class LibraryFolderMetadata(Model):
     total_rows: int
     can_modify_folder: bool
     can_add_library_item: bool
-    full_path: List[Tuple[EncodedLibraryFolderDatabaseIdField, str]]
+    full_path: list[tuple[EncodedLibraryFolderDatabaseIdField, str]]
+
+class ExtendedLibraryFolderMetadata(LibraryFolderMetadata):
+    readme_raw: Optional[str] = None
 
 
 class LibraryFolderContentsIndexResult(Model):
-    metadata: LibraryFolderMetadata
-    folder_contents: List[AnyLibraryFolderItem]
+    metadata: ExtendedLibraryFolderMetadata
+    folder_contents: list[AnyLibraryFolderItem]
 
 
 class CreateLibraryFilePayload(Model):
