@@ -71,6 +71,9 @@
             <discover_datasets pattern="__name_and_ext__" directory="rstudio_outputs/" assign_primary_output="true" recurse="true"/>
         </collection>
     </outputs>
+    <stdio>
+        <exit_code range="129" level="log" description="User shut down the container."/>
+    </stdio>
     <tests>
         <test expect_num_outputs="1">
             <param name="mode" value="previous" />
