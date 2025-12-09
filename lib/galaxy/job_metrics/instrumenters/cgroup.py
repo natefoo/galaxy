@@ -106,6 +106,22 @@ fi
 """.replace(
     "\n", " "
 ).strip()
+MEMORY_REPORTER_TEMPLATE = r"""
+cgroup_path=$(cat "/proc/$$/cgroup" | awk -F':' '($1=="0") {{print $3}}');
+if [ -n "$cgroup_path" ]; then
+    {{
+    __memory_reporter_start=$SECONDS
+    echo 0$'\t'$(cat {cgroup_mount}/${{cgroup_path}}/memory.current) > {metrics};
+    (while true; do sleep 60; echo $(($SECONDS - $__memory_reporter_start))$'\t'$(cat {cgroup_mount}/${{cgroup_path}}/memory.current) >> {metrics}; done) &
+    echo $$ > {metrics}.pid;
+    }} >/dev/null 2>&1
+fi
+"""
+# +1 ensures time is always > last time
+MEMORY_REPORTER_TEMPLATE_END = r"""
+if [ -f {metrics}.pid ]; then kill $(cat {metrics}.pid) 2>/dev/null || true; fi
+echo $(($SECONDS + 1 - $__memory_reporter_start))$'\t'$(cat {cgroup_mount}/${{cgroup_path}}/memory.current) >> {metrics}
+"""
 
 
 Metric = namedtuple("Metric", ("key", "subkey", "value"))
@@ -151,6 +167,13 @@ class CgroupPlugin(InstrumentPlugin):
             params = list(DEFAULT_PARAMS)
         self.params = params
 
+    def pre_execute_instrument(self, job_directory: str) -> List[str]:
+        commands = []
+        commands.append(MEMORY_REPORTER_TEMPLATE.format(
+            metrics=self._instrument_file_path(job_directory, "_memory_metrics"), cgroup_mount=self.cgroup_mount
+        ))
+        return commands
+
     def post_execute_instrument(self, job_directory: str) -> List[str]:
         commands: List[str] = []
         if self.version in ("auto", "1"):
@@ -171,6 +194,8 @@ class CgroupPlugin(InstrumentPlugin):
     def __record_cgroup_v2_usage(self, job_directory: str) -> str:
         return CGROUPSV2_TEMPLATE.format(
             metrics=self.__cgroup_metrics_file(job_directory), cgroup_mount=self.cgroup_mount
+        ) + MEMORY_REPORTER_TEMPLATE_END.format(
+            metrics=self._instrument_file_path(job_directory, "_memory_metrics"), cgroup_mount=self.cgroup_mount
         )
 
     def __cgroup_metrics_file(self, job_directory):
