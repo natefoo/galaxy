@@ -80,10 +80,18 @@ class TestRepositoryInstallIntegrationTestCase(integration_util.IntegrationTestC
             ), f"Shed loc file should not land at tool_data_path root: {loc_file}"
         shed_conf = self._app.config.shed_tool_data_table_config
         if os.path.exists(shed_conf):
-            for table_elem in ET.parse(shed_conf).getroot().findall("table"):
+            tables = ET.parse(shed_conf).getroot().findall("table")
+            assert tables, f"Expected at least one <table> entry in {shed_conf} for non-DM install"
+            for table_elem in tables:
                 assert (
                     table_elem.find("tool_shed_repository") is None
                 ), f"Table {table_elem.get('name')!r} should not have a <tool_shed_repository> sub-element"
+                file_elem = table_elem.find("file")
+                assert file_elem is not None, f"Table {table_elem.get('name')!r} missing <file> entry"
+                file_path = file_elem.get("path", "")
+                assert (
+                    os.sep + "shed" + os.sep in file_path
+                ), f"Table {table_elem.get('name')!r} file path {file_path!r} should reference the shed/ subdir"
 
     def test_repository_update(self):
         response = self._install_repository(revision=REVISION_4, version="0.0.3", allow_upgraded=True)[0]

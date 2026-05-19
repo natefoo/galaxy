@@ -169,15 +169,19 @@ class ShedToolDataTableManager(BaseShedToolDataTableManager):
         attributing them to the installing repository. 99% of .loc.sample files are empty/comments,
         in which case this is a no-op.
 
-        Skipped for non-tabular table types (e.g. ``RefgenieToolDataTable``) whose
-        ``parse_file_fields`` is not designed to read a ``.loc.sample``.
+        Rows that reference ``${__HERE__}`` are dropped with a warning: the shared loc file lives
+        under ``tool_data_path/shed/``, so a preserved ``${__HERE__}`` would resolve to the wrong
+        directory at read time.
+
+        Caller must gate on ``isinstance(existing_table, TabularToolDataTable)`` — non-tabular
+        table types have a different ``parse_file_fields`` contract.
         """
-        if getattr(existing_table, "type_key", "tabular") != "tabular":
-            return
         attribution = (
             f"Added by {tool_shed_repository.owner}/{tool_shed_repository.name}"
             f"@{tool_shed_repository.installed_changeset_revision}"
         )
+        here_sentinel = "${__HERE__}"
+        table_name = elem.get("name") or ""
         for file_elem in elem.findall("file"):
             shared_path = file_elem.get("path")
             if not shared_path:
@@ -186,28 +190,47 @@ class ShedToolDataTableManager(BaseShedToolDataTableManager):
             source_loc_sample = loc_basename_to_source.get(basename)
             if not source_loc_sample or not os.path.exists(source_loc_sample):
                 continue
-            # Keep `${__HERE__}` literal so the appended rows match the shared loc's existing format.
-            new_rows = existing_table.parse_file_fields(source_loc_sample, here="${__HERE__}")
-            if new_rows:
-                existing_table.append_entries_with_attribution(new_rows, attribution)
+            # Pass the sentinel through unsubstituted so we can detect rows that used HERE.
+            parsed_rows = existing_table.parse_file_fields(source_loc_sample, here=here_sentinel)
+            kept_rows = []
+            for row in parsed_rows:
+                if any(here_sentinel in field for field in row):
+                    log.warning(
+                        "Skipping row in '%s' that references ${__HERE__}: shared loc file '%s' "
+                        "would resolve it to the wrong directory (table '%s', repo '%s/%s').",
+                        source_loc_sample,
+                        shared_path,
+                        table_name,
+                        tool_shed_repository.owner,
+                        tool_shed_repository.name,
+                    )
+                    continue
+                kept_rows.append(row)
+            if kept_rows:
+                existing_table.append_entries_with_attribution(kept_rows, attribution)
 
-    def _shed_config_has_matching_entry(self, table_name: str, elem: Element) -> bool:
-        """Return True if ``shed_tool_data_table_config`` already has a ``<table>`` with the same
-        ``name`` and identical set of ``<file path>`` entries as ``elem``.
-
-        Used to avoid writing duplicate ``<table>`` entries for tables that have already been
-        registered by a prior install. The shed config remains the persistent source of the
-        shared loc file's association with the data table name — on reload, ``merge_tool_data_table``
-        re-applies the filename info to the in-memory table.
-        """
+    def _load_shed_config_tree(self):
+        """Parse ``shed_tool_data_table_config`` once for dedup checks. Returns ``None`` if the
+        file doesn't exist or can't be read; callers treat that as "nothing to dedup against"."""
         config = self.app.config.shed_tool_data_table_config
         if not config or not os.path.exists(config):
-            return False
+            return None
         try:
             tree, _ = xml_util.parse_xml(config)
         except OSError as e:
             log.warning("Could not read shed_tool_data_table_config '%s' for dedup check: %s", config, e)
-            return False
+            return None
+        return tree
+
+    @staticmethod
+    def _tree_has_matching_entry(tree, table_name: str, elem: Element) -> bool:
+        """Return True if ``tree`` (parsed ``shed_tool_data_table_config``) already has a
+        ``<table>`` with ``name == table_name`` and identical set of ``<file path>`` entries
+        as ``elem``. Used to avoid writing duplicate ``<table>`` entries for tables that have
+        already been registered by a prior install. The shed config remains the persistent
+        source of the shared loc file's association with the data table name — on reload,
+        ``merge_tool_data_table`` re-applies the filename info to the in-memory table.
+        """
         if tree is None:
             return False
         elem_paths = {fe.get("path") for fe in elem.findall("file") if fe.get("path")}
@@ -279,6 +302,8 @@ class ShedToolDataTableManager(BaseShedToolDataTableManager):
                 TOOL_DATA_TABLE_FILE_SAMPLE_NAME,
             )
         registered_tables = self.app.tool_data_tables.data_tables
+        # Parse the shed config once for dedup checks instead of re-reading it per elem.
+        shed_config_tree = self._load_shed_config_tree()
         kept_elems: list = []
         for elem in elems:
             if elem.tag != "table":
@@ -297,7 +322,7 @@ class ShedToolDataTableManager(BaseShedToolDataTableManager):
                 # Already registered with matching columns. Merge any rows from this install's
                 # .loc.sample(s) into the shared loc file.
                 self._merge_loc_sample_entries(existing, elem, loc_basename_to_source, tool_shed_repository)
-                if self._shed_config_has_matching_entry(table_name, elem):
+                if self._tree_has_matching_entry(shed_config_tree, table_name, elem):
                     # An identical <table> entry already exists in shed_tool_data_table_config.
                     # Don't write another one (it would just duplicate the shared loc reference).
                     continue

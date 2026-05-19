@@ -170,7 +170,6 @@ class InstallRepositoryManager:
         session.add(tool_shed_repository)
         session.commit()
 
-        is_data_manager = "data_manager" in irmm_metadata_dict
         if "sample_files" in irmm_metadata_dict:
             sample_files = irmm_metadata_dict.get("sample_files", [])
             tool_index_sample_files = stdtm.get_tool_index_sample_files(sample_files)
@@ -195,11 +194,9 @@ class InstallRepositoryManager:
             sample_files_copied = [str(s) for s in tool_index_sample_files]
             repository_tools_tups = irmm.get_repository_tools_tups()
             if repository_tools_tups:
-                if is_data_manager:
-                    # Only Data Manager repos register data tables on install.
-                    repository_tools_tups = stdtm.handle_missing_data_table_entry(
-                        relative_install_dir, tool_path, repository_tools_tups
-                    )
+                repository_tools_tups = stdtm.handle_missing_data_table_entry(
+                    relative_install_dir, tool_path, repository_tools_tups
+                )
                 # Handle missing index files for tool parameters that are dynamically generated select lists.
                 repository_tools_tups, sample_files_copied = tool_util.handle_missing_index_file(
                     self.app, tool_path, sample_files, repository_tools_tups, sample_files_copied

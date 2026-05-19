@@ -67,6 +67,22 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+
+def _ensure_trailing_newline(fh: BinaryIO) -> None:
+    """Ensure ``fh`` (open in r+b mode) ends with a newline.
+
+    Seeks to end-of-file; if the file is non-empty and the last byte isn't a newline,
+    writes one. Leaves the file position at end-of-file so subsequent appends produce
+    one row per line.
+    """
+    fh.seek(0, 2)
+    if fh.tell() == 0:
+        return
+    fh.seek(-1, 2)
+    if fh.read(1) not in (b"\n", b"\r"):
+        fh.write(b"\n")
+
+
 BUNDLE_INDEX_FILE_NAME = "_gx_data_bundle_index.json"
 DEFAULT_TABLE_TYPE = "tabular"
 
@@ -757,12 +773,7 @@ class TabularToolDataTable(ToolDataTable):
                     try:
                         if os.path.exists(filename):
                             data_table_fh = open(filename, "r+b")
-                            if os.stat(filename).st_size > 0:
-                                # ensure last existing line ends with new line
-                                data_table_fh.seek(-1, 2)  # last char in file
-                                last_char = data_table_fh.read(1)
-                                if last_char not in [b"\n", b"\r"]:
-                                    data_table_fh.write(b"\n")
+                            _ensure_trailing_newline(data_table_fh)
                         else:
                             data_table_fh = open(filename, "wb")
                     except OSError as e:
@@ -783,6 +794,9 @@ class TabularToolDataTable(ToolDataTable):
         (the table's primary key) against existing in-memory rows and the pending
         batch. Writes a single ``{comment_char} {attribution}`` line before the first
         new row. No-op if no rows survive the dedup.
+
+        Holds a ``FileLock`` for the duration of the append to serialize with
+        concurrent ``_add_entry`` calls (Data Manager row appends) on the same loc.
         """
         filename: Optional[str] = self.get_filename_for_source(None)
         if filename is None:
@@ -807,6 +821,12 @@ class TabularToolDataTable(ToolDataTable):
                 )
                 continue
             if existing_values is not None and fields[value_index] in existing_values:
+                log.debug(
+                    'Skipping duplicate entry for data table "%s" (value=%s): "%s"',
+                    self.name,
+                    fields[value_index],
+                    fields,
+                )
                 continue
             new_rows.append(fields)
             if existing_values is not None:
@@ -814,12 +834,13 @@ class TabularToolDataTable(ToolDataTable):
         if not new_rows:
             return self._loaded_content_version
         with FileLock(filename):
-            if os.path.exists(filename) and os.stat(filename).st_size > 0:
-                with open(filename, "rb+") as fh:
-                    fh.seek(-1, 2)
-                    if fh.read(1) not in (b"\n", b"\r"):
-                        fh.write(b"\n")
-            with open(filename, "ab") as fh:
+            fh: BinaryIO
+            if os.path.exists(filename):
+                fh = open(filename, "r+b")
+                _ensure_trailing_newline(fh)
+            else:
+                fh = open(filename, "wb")
+            with fh:
                 fh.write(f"{self.comment_char} {attribution}\n".encode())
                 for fields in new_rows:
                     fh.write(f"{self.separator.join(fields)}\n".encode())
@@ -1067,10 +1088,12 @@ class ToolDataTableManager(Dictifiable):
     ) -> None:
         """Raise if ``candidate_name`` is already registered with different columns."""
         existing = self.data_tables.get(candidate_name)
-        if existing is not None:
-            existing_columns = getattr(existing, "columns", None)
-            if existing_columns is not None and existing_columns != candidate_columns:
-                raise DataTableColumnMismatch(candidate_name, existing_columns, candidate_columns)
+        if (
+            isinstance(existing, TabularToolDataTable)
+            and existing.columns is not None
+            and existing.columns != candidate_columns
+        ):
+            raise DataTableColumnMismatch(candidate_name, existing.columns, candidate_columns)
 
     def to_dict(
         self, view: str = "collection", value_mapper: Optional[Dict[str, Callable]] = None
